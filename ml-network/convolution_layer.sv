@@ -19,7 +19,7 @@ module convolution_layer #(
     IConvConfig4.read config_4_i,
 
     // Data Inputs
-    input [N*KernelSize*KernelSize-1:0] kernel_weights_i [EngineCount-1:0], // kernel weights
+    input [N-1:0] kernel_weights_i [EngineCount-1:0][KernelSize*KernelSize-1:0], // kernel weights
     input [N-1:0] activation_data_i, // activation data
 
     // Output Registers
@@ -83,7 +83,7 @@ module convolution_layer #(
 
       // Convolver instantiation
       convolver #(
-                  .MaxMatrixSize(MaxMatrixSize),
+                  .MatrixSize(MaxMatrixSize),
                   .KernelSize(KernelSize),
                   .N(N)
                 ) conv_inst (
@@ -100,7 +100,7 @@ module convolution_layer #(
                 );
 
       assign sum = (config_2_i.accumulate) ? conv_result + prev_result : conv_result; //TODO: add in shifting based on overflow and count for that
-      assign sum_shifted[i] = sum[N-1:0]; //TODO: apply shifting to this
+      assign sum_shifted = sum >> N; //TODO: apply shifting to this
 
       dual_port_bram #(
                        .DataWidth(2*N),
@@ -116,7 +116,7 @@ module convolution_layer #(
                        .b_write_en_i(1'b0),
                        .b_addr_i(conv_counter),
                        .b_data_i({N{1'b0}}),
-                       .b_data_o(conv_result)
+                       .b_data_o(prev_result)
                      );
 
       // Outputs of generated convolvers
