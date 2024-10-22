@@ -6,10 +6,10 @@ module mac #(
     input logic clk_i,
     input logic rst_i,
     input logic en_i,
-    input logic [N-1:0] value_i,
-    input logic [N-1:0] mult_i,
-    input logic [2*N-1:0] add_i,
-    output logic [2*N-1:0] mac_o
+    input logic signed [N-1:0] value_i,
+    input logic signed [N-1:0] mult_i,
+    input logic signed [2*N-1:0] add_i,
+    output logic signed [2*N-1:0] mac_o
   );
 
   logic [2*N-1:0] mult, mac_result;

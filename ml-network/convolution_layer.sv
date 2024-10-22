@@ -1,7 +1,6 @@
 // TODO: add padding to the input matrix
 // TODO: add shifting to the sum
 // TODO: add activation functions on results
-// TODO: add testbench
 module convolution_layer #(
     parameter MaxMatrixSize = 16383, // maximum matrix size that this convolver can convolve
     parameter KernelSize = 3, // kernel size
@@ -52,7 +51,7 @@ module convolution_layer #(
   end
 
 
-  localparam ConvOutputCount = (MaxMatrixSize-KernelSize)**2;
+  localparam ConvOutputCount = (MaxMatrixSize-KernelSize+1)**2;
   localparam ConvOutputSize = $clog2(ConvOutputCount) + 1;
 
   logic [EngineCount-1:0] conv_done;
@@ -101,23 +100,22 @@ module convolution_layer #(
                   .end_conv_o(done)
                 );
 
-      assign sum_accum = (config_2_i.accumulate) ? conv_result + prev_result : {{conv_result[2*N-1]},{conv_result}};
-      assign sum = sum_accum >>> config_3_i.shift_amount; //TODO: add in shifting based on overflow and count for that
-      assign sum_output = (config_2_i.save_to_ram && valid) ? sum[N-1:0] : {N{1'b0}}; //TODO: apply shifting to this
+      assign sum_accum = (config_2_i.accumulate) ? conv_result + prev_result : conv_result;
+      assign sum = sum_accum >>> config_3_i.shift_amount;
 
       dual_port_bram #(
                        .DataWidth(2*N),
                        .Depth(ConvOutputCount)
-                     ) weight_bram (
-                       .clk_i(valid),
+                     ) accumulate_prev_conv (
+                       .clk_i,
                        // Port A (load data)
-                       .a_write_en_i(1'b1),
+                       .a_write_en_i(valid), // Write on valid
                        .a_addr_i(conv_counter),
                        .a_data_i(sum),
                        .a_data_o(),
                        // Port B (Direct Convolution Access)
                        .b_write_en_i(1'b0),
-                       .b_addr_i(conv_counter),
+                       .b_addr_i(valid? (conv_counter + 1'd1) : conv_counter),
                        .b_data_i({{2*N}{1'b0}}),
                        .b_data_o(prev_result)
                      );
@@ -127,13 +125,13 @@ module convolution_layer #(
         assign conv_valid = valid;
 
       assign conv_done[i] = (i < config_1_i.engine_count) ? done : 1'b1;
-      assign data_o[i] = (i < config_1_i.engine_count) ? sum_output : {N{1'b0}};
+      assign data_o[i] = (i < config_1_i.engine_count && config_2_i.save_to_ram && valid) ? sum[N-1:0] : {N{1'b0}};
     end
   endgenerate
 
   logic done;
 
-  assign done = conv_done == {EngineCount{1'b1}};
+  assign done = (conv_done == {EngineCount{1'b1}});
   assign status_o.done = done;
   assign status_o.running = run_i && !done;
   assign conv_valid_o = (config_2_i.save_to_ram) ? conv_valid : 1'b0;
@@ -151,8 +149,7 @@ module convolution_layer #(
 endmodule
 
 
-// TODO: Test outputs to ensure it is correct,
-//       Currently it looks like it works how I want it to
+// TODO: Add more test that cover other features
 module tb_convolution_layer ();
   parameter Bits = 8;
   parameter EngineCount = 2;
@@ -237,7 +234,7 @@ module tb_convolution_layer ();
     rst = 1'b1;
     en = 1'b0;
     activation_data = 8'b0;
-    conv_config_2.full_register = 16'h8005; // Accumulate = 1, SaveToRam = 0, MatrixSize = 5
+    conv_config_2.full_register = 16'h0005; // Accumulate = 0, SaveToRam = 0, MatrixSize = 5
     conv_config_3.full_register = 16'h0000; // Padding = 0, PaddingFill = 0, ShiftAmount = 0
 
     @(posedge clk);
@@ -254,7 +251,7 @@ module tb_convolution_layer ();
 
     @(posedge conv_status.done);
     @(posedge clk);
-    conv_config_2.full_register = 16'h4005; // Accumulate = 0, SaveToRam = 1, MatrixSize = 5
+    conv_config_2.full_register = 16'hC005; // Accumulate = 1, SaveToRam = 1, MatrixSize = 5
     conv_config_3.full_register = 16'h0009; // Padding = 0, PaddingFill = 0, ShiftAmount = 9
     rst = 1'b1;
     @(posedge clk);
@@ -266,5 +263,20 @@ module tb_convolution_layer ();
       @(posedge clk);
     end
 
+    @(posedge conv_status.done);
+    @(posedge clk);
+
+    $finish;
+  end
+
+  always @(posedge clk)
+  begin
+    if (conv_valid)
+    begin
+      assert(data_o[0] == 8'h00) else
+              $error("Convolution 0 failed: output = %d, expected %d", data_o[0], 8'h00);
+      assert(data_o[1] == 8'h00) else
+              $error("Convolution 1 failed: output = %d, expected %d", data_o[1], 8'h00);
+    end
   end
 endmodule
