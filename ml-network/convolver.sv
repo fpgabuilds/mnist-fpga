@@ -1,19 +1,20 @@
 // Inspiration taken from https://thedatabus.in/convolver
 // and then heavily modified to fit the requirements of the project
+// TODO: add matrix_size_i to the shift registers in the mac so matrix size can change
 module convolver #(
-    parameter MatrixSize = 3, // maximum matrix size that this convolver can convolve
+    parameter MaxMatrixSize = 3, // maximum matrix size that this convolver can convolve
     parameter KernelSize = 3, // kernel size
     parameter N = 16 // total bit width
   )(
     input logic clk_i, // clock
     input logic rst_i, // reset active high
     input logic en_i, // enable convolver
-    input logic [N-1:0] data_i, //data in
+    input logic signed  [N-1:0] data_i, //data in
     input logic [5:0] stride_i, // value of stride (horizontal and vertical stride are equal) 0-64
-    input logic [$clog2(MatrixSize):0] matrix_size_i, // size of the matrix
-    input [N-1:0] weights_i [KernelSize*KernelSize-1:0], // weights
+    input logic [13:0] matrix_size_i, // size of the matrix
+    input signed  [N-1:0] weights_i [KernelSize*KernelSize-1:0], // weights
 
-    output logic [2*N-1:0] conv_o, // convolution output
+    output logic signed [2*N-1:0] conv_o, // convolution output
     output logic valid_conv_o, // valid convolution output
     output logic end_conv_o // end of convolution
   );
@@ -21,16 +22,16 @@ module convolver #(
   begin
     assert (KernelSize > 1) else
              $error("KernelSize must be greater than 1");
-    assert (MatrixSize > 1) else
-             $error("MatrixSize must be greater than 1");
+    assert (MaxMatrixSize > 1) else
+             $error("MaxMatrixSize must be greater than 1");
     assert (N > 0) else
              $error("N must be greater than 0");
-    assert (MatrixSize >= KernelSize) else
-             $error("MatrixSize must be greater than or equal to KernelSize");
-    assert (stride_i < MatrixSize) else
-             $error("Stride must be less than MatrixSize, stride = %0d, MatrixSize = %0d", stride_i, MatrixSize);
-    assert (matrix_size_i <= MatrixSize) else
-             $error("matrix_size_i must be less than or equal to MatrixSize");
+    assert (MaxMatrixSize >= KernelSize) else
+             $error("MaxMatrixSize must be greater than or equal to KernelSize");
+    assert (stride_i < MaxMatrixSize) else
+             $error("Stride must be less than MaxMatrixSize, stride = %0d, MaxMatrixSize = %0d", stride_i, MaxMatrixSize);
+    assert (matrix_size_i <= MaxMatrixSize) else
+             $error("matrix_size_i must be less than or equal to MaxMatrixSize");
     assert (matrix_size_i > 1) else
              $error("matrix_size_i must be greater than 1");
   end
@@ -69,7 +70,7 @@ module convolver #(
         end
         else
         begin
-          logic [2*N-1:0] end_row_data;
+          logic signed [2*N-1:0] end_row_data;
           mac #(.N(N)) mac_end_row (
                 .clk_i(clk_i),
                 .rst_i(rst_i),
@@ -82,7 +83,7 @@ module convolver #(
 
           shift_reg #(
                       .N(2*N), // Width of the data
-                      .Length(MatrixSize-KernelSize) // Number of registers
+                      .Length(MaxMatrixSize-KernelSize) // Number of registers
                     ) row_shift (
                       .clk_i(clk_i), // clock
                       .en_i(en_i), // enable shift
@@ -113,7 +114,7 @@ module convolver #(
   logic stride_conv;
 
   // Count the amount of clock cycles used in the convolution
-  localparam ClkCountSize = $clog2(MatrixSize*MatrixSize + 1) + 1;
+  localparam ClkCountSize = $clog2(MaxMatrixSize*MaxMatrixSize + 1) + 1;
 
   logic [ClkCountSize-1:0] max_clk_count;
   logic [ClkCountSize-1:0] clk_count;
@@ -131,12 +132,12 @@ module convolver #(
                         .count_o(clk_count)        // of the convolution is signaled by the end_conv_o signal
                       );
 
-  assign min_cycles = clk_count > ((KernelSize-1)*MatrixSize+KernelSize-1);
+  assign min_cycles = clk_count > ((KernelSize-1)*MaxMatrixSize+KernelSize-1);
   assign end_conv_o = (clk_count == max_clk_count) ? 1'b1 : 1'b0;
 
 
   // Count valid and invalid convolution outputs per row
-  localparam ConvCountSize = $clog2(MatrixSize-KernelSize) + 1;
+  localparam ConvCountSize = $clog2(MaxMatrixSize-KernelSize) + 1;
   localparam InvConcCountSize = $clog2(KernelSize-2) + 1;
 
   logic [ConvCountSize-1:0] max_conv_count;
@@ -144,7 +145,7 @@ module convolver #(
   logic [InvConcCountSize-1:0] max_inv_count;
   logic [InvConcCountSize-1:0] inv_count;
 
-  assign max_conv_count = MatrixSize-KernelSize;
+  assign max_conv_count = MaxMatrixSize-KernelSize;
   assign max_inv_count = KernelSize-2;
 
   counter #(
@@ -183,18 +184,18 @@ module convolver #(
 
 
   // Count the amount of output rows done in the convolution
-  localparam RowCountSize = $clog2(MatrixSize-KernelSize) + 1;
+  localparam RowCountSize = $clog2(MaxMatrixSize-KernelSize) + 1;
 
   logic [RowCountSize-1:0] max_row_count;
   logic [RowCountSize-1:0] row_count;
 
-  assign max_row_count = MatrixSize - KernelSize;
+  assign max_row_count = MaxMatrixSize - KernelSize;
 
   increment_then_stop #(
                         .Bits(RowCountSize)
                       ) row_counter ( // Counts total clock cycles used in this convolution
                         .clk_i(clk_i),
-                        .run_i(conv_count == MatrixSize-KernelSize),
+                        .run_i(conv_count == MaxMatrixSize-KernelSize),
                         .rst_i(rst_i),
                         .start_val_i({RowCountSize{1'b0}}),
                         .end_val_i(max_row_count), // it does not matter if the actual matrix is smaller
@@ -207,7 +208,7 @@ module convolver #(
 
   assign a = ((conv_count + 1) % stride_i == 0) && (row_count % stride_i == 0);
   assign b = (inv_count == KernelSize-2)&&(row_count % stride_i == 0);
-  assign c = (clk_count == (KernelSize-1)*MatrixSize+KernelSize-1);
+  assign c = (clk_count == (KernelSize-1)*MaxMatrixSize+KernelSize-1);
 
   assign stride_conv = (a || b || c);
   assign valid_conv_o = (min_cycles && row_conv && stride_conv && !end_conv_o);
