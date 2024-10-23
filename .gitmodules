@@ -1,0 +1,4 @@
+[submodule "ram/sdram-controller"]
+	path = ram/sdram-controller
+	url = https://github.com/hdl-util/sdram-controller.git
+	branch = master
