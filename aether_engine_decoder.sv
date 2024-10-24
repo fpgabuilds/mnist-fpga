@@ -219,23 +219,23 @@ module aether_engine_decoder (
 
 
 
-  aether_engine_tasked_ram tasked_ram (
-                             .clk_i,
-                             .rst_i(task_ram_rst),
-                             .addr_i({ram_addr_msb, cmd_buffer[15:0]}),
+  // aether_engine_tasked_ram tasked_ram (
+  //                            .clk_i,
+  //                            .rst_i(task_ram_rst),
+  //                            .addr_i({ram_addr_msb, cmd_buffer[15:0]}),
 
-                             // Read
-                             .read_en_i(ram_read_en),
-                             .task_i(cmd_buffer[19:16]),
-                             .data_o(ram_data_o),
-                             .task_o(ram_task_o),
-                             .data_valid_o(ram_data_valid_o),
+  //                            // Read
+  //                            .read_en_i(ram_read_en),
+  //                            .task_i(cmd_buffer[19:16]),
+  //                            .data_o(ram_data_o),
+  //                            .task_o(ram_task_o),
+  //                            .data_valid_o(ram_data_valid_o),
 
-                             // Write
-                             .data_i(64'h55AA55AA55AA55AA), // TODO: This needs to come from the register (maybe a fifo)
-                             .write_en_i(ram_write_en),
-                             .byte_en_i(8'b1) // If the register is fifo this can be calculated
-                           );
+  //                            // Write
+  //                            .data_i(64'h55AA55AA55AA55AA), // TODO: This needs to come from the register (maybe a fifo)
+  //                            .write_en_i(ram_write_en),
+  //                            .byte_en_i(8'b1) // If the register is fifo this can be calculated
+  //                          );
 
   always_comb
   begin
