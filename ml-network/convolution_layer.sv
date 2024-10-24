@@ -18,15 +18,15 @@ module convolution_layer #(
     IConvConfig4.read config_4_i,
 
     // Data Inputs
-    input signed [N-1:0] kernel_weights_i [EngineCount-1:0][KernelSize*KernelSize-1:0], // kernel weights
-    input signed [N-1:0] activation_data_i, // activation data
+    input wire signed [N-1:0] kernel_weights_i [EngineCount-1:0][KernelSize*KernelSize-1:0], // kernel weights
+    input logic signed [N-1:0] activation_data_i, // activation data
 
     // Output Registers
     IConvStatus.write status_o, // convolution results [1[Done], 1[Running], 14[Convolution Count]]
 
     // Data Outputs
-    output signed [N-1:0] data_o [EngineCount-1:0], // convolution data output
-    output conv_valid_o // convolution valid
+    output logic signed [N-1:0] data_o [EngineCount-1:0], // convolution data output
+    output logic conv_valid_o // convolution valid
   );
 
   always @ (posedge clk_i)

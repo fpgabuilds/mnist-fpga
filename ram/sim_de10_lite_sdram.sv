@@ -4,7 +4,7 @@ module de10_lite_sdram #(
     parameter SdramWriteBurst = 1 // OFF = Single write mode, ON = Burst write mode (same length as read burst)
   ) (
     input logic clk_i,
-    input rst_i,
+    input logic rst_i,
 
     // 0 = Idle
     // 1 = Write (with Auto Precharge)

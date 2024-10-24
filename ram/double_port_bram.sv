@@ -6,17 +6,17 @@ module dual_port_bram #(
     parameter DataWidth = 8,
     parameter Depth = 1024
   ) (
-    input wire clk_i,
+    input logic clk_i,
     // Port A
-    input wire a_write_en_i,
-    input wire [$clog2(Depth):0] a_addr_i,
-    input wire [DataWidth-1:0] a_data_i,
-    output reg [DataWidth-1:0] a_data_o,
+    input logic a_write_en_i,
+    input logic [$clog2(Depth):0] a_addr_i,
+    input logic [DataWidth-1:0] a_data_i,
+    output logic [DataWidth-1:0] a_data_o,
     // Port B
-    input wire b_write_en_i,
-    input wire [$clog2(Depth):0] b_addr_i,
-    input wire [DataWidth-1:0] b_data_i,
-    output reg [DataWidth-1:0] b_data_o
+    input logic b_write_en_i,
+    input logic [$clog2(Depth):0] b_addr_i,
+    input logic [DataWidth-1:0] b_data_i,
+    output logic [DataWidth-1:0] b_data_o
   );
 
   reg [DataWidth-1:0] memory [0:Depth-1];

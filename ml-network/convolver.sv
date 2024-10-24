@@ -12,7 +12,7 @@ module convolver #(
     input logic signed  [N-1:0] data_i, //data in
     input logic [5:0] stride_i, // value of stride (horizontal and vertical stride are equal) 0-64
     input logic [13:0] matrix_size_i, // size of the matrix
-    input signed  [N-1:0] weights_i [KernelSize*KernelSize-1:0], // weights
+    input wire signed [N-1:0] weights_i [KernelSize*KernelSize-1:0], // weights
 
     output logic signed [2*N-1:0] conv_o, // convolution output
     output logic valid_conv_o, // valid convolution output

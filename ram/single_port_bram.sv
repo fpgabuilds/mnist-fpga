@@ -4,11 +4,11 @@ module single_port_bram #(
     parameter DataWidth = 8,
     parameter Depth = 1024
   ) (
-    input wire clk_i,
-    input wire write_en_i,
-    input wire [$clog2(Depth):0] addr_i,
-    input wire [DataWidth-1:0] data_i,
-    output reg [DataWidth-1:0] data_o
+    input logic clk_i,
+    input logic write_en_i,
+    input logic [$clog2(Depth):0] addr_i,
+    input logic [DataWidth-1:0] data_i,
+    output logic [DataWidth-1:0] data_o
   );
 
   reg [DataWidth-1:0] memory [0:Depth-1];
