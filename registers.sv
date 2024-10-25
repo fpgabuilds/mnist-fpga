@@ -1,3 +1,5 @@
+// TODO: get these to reset with an instruction to a default value
+
 // Register: 0x01
 // Direction: read
 // Description: Version Register

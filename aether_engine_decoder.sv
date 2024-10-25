@@ -5,8 +5,6 @@ module aether_engine_decoder (
     input logic [23:0] cmd_i, // command input
     output logic [15:0] data_o, // data output
 
-    output logic buffer_full_o, // buffer full, do not send any more commands
-
     // Register Variables
     IVersion version,
     IRamAddrLow ram_addr_low,
@@ -19,52 +17,56 @@ module aether_engine_decoder (
 
     IConvStatus conv_status,
 
-    IInterrupt interrupt,
-
     IWriteToMem write_to_mem,
     IReadFromMem read_from_mem,
 
-    // Convolution Weight Variables
-    output logic conv_weight_rst_o,
+
+    // Reset Variables
+    output logic rst_cwgt_o,
+    output logic rst_conv_o,
+    output logic rst_dwgt_o,
+    output logic rst_dens_o,
+
+    // Load Weights Variables
+    output logic ldw_cwgt_o,
+    output logic ldw_dwgt_o,
 
     // Convolution Variables
-    output logic conv_rst_o,
-    output logic start_conv_o,
+    output logic cnv_run_o,
+    output logic [3:0] cnv_count_o,
 
-    // Ram Output
-    output logic [63:0] ram_data_o,
-    output logic [3:0] ram_task_o,
-    output logic ram_data_valid_o
+    // Dense Variables
+    output logic dns_run_o,
+    output logic [3:0] dns_count_o,
+
+    // Memory Variables
+    output logic [31:0] mem_addr_start_o,
+    output logic mem_load_enable_o
   );
 
   //------------------------------------------------------------------------------------
   // Instruction Definitions
   //------------------------------------------------------------------------------------
-  localparam NOP = 4'b0000;
-  localparam RESET = 4'b0001;
-  localparam WRITE_REG = 4'b0010;
-  localparam READ_REG = 4'b0011;
-  localparam START_TASK = 4'b0100;
+  localparam INST_NOP = 4'd0; // No Operation
+  localparam INST_RST = 4'd1; // Reset
+  localparam INST_RDR = 4'd2; // Read Register
+  localparam INST_WRR = 4'd3; // Write Register
+  localparam INST_LDW = 4'd4; // Load Weights
+  localparam INST_CNV = 4'd5; // Run Convolution
+  localparam INST_DNS = 4'd6; // Run Dense Layer
 
 
   //------------------------------------------------------------------------------------
-  // Input Command Buffer
+  // Split Input Commands
   //------------------------------------------------------------------------------------
-  logic [23:0] last_cmd;
-  logic [23:0] cmd_buffer;
 
-  d_ff #( // Last Command
-         .Width(24)
-       ) d_ff_instruction (
-         .clk_i,
-         .rst_i(1'b0),
-         .en_i(1'b1),
-         .data_i(cmd_i),
-         .data_o(last_cmd)
-       );
+  logic [3:0] instruction;
+  logic [3:0] param_1;
+  logic [15:0] param_2;
 
-  assign cmd_buffer = last_cmd; // TODO: This needs to be a fifo buffer
-  assign buffer_full_o = 1'b0; // TODO: This needs to be calulated based on the fifo buffer
+  assign instruction = cmd_i[23:20];
+  assign param_1 = cmd_i[19:16];
+  assign param_2 = cmd_i[15:0];
 
 
   //------------------------------------------------------------------------------------
@@ -77,81 +79,49 @@ module aether_engine_decoder (
   //------------------------------------------------------------------------------------
   // Reset Instruction Instruction
   //------------------------------------------------------------------------------------
-  localparam RST_ALL = 4'b0000;
-  localparam RST_CONV = 4'b0001;
-  localparam RST_CONV_WEIGHTS = 4'b0010;
-  localparam TASK_RAM = 4'b0011; // Can be used to clear memory tasks from processing data, but probably bad idea
-
-  logic task_ram_rst;
-  logic rst_conv_rst;
+  localparam RST_FULL = 4'd0;
+  localparam RST_CWGT = 4'd1;
+  localparam RST_CONV = 4'd2;
+  localparam RST_DWGT = 4'd3;
+  localparam RST_DENS = 4'd4;
 
   always_comb
   begin
-    rst_conv_rst = 1'b0;
-    conv_weight_rst_o = 1'b0;
-    task_ram_rst = 1'b0;
+    rst_cwgt_o = 1'b0;
+    rst_conv_o = 1'b0;
+    rst_dwgt_o = 1'b0;
+    rst_dens_o = 1'b0;
 
-    if (cmd_buffer[23:20] == RESET)
+    if (instruction == INST_RST)
     begin
-      case (cmd_buffer[19:16])
-        RST_ALL:
+      case (param_1)
+        RST_FULL:
         begin
-          rst_conv_rst = 1'b1;
-          conv_weight_rst_o = 1'b1;
+          rst_cwgt_o = 1'b1;
+          rst_conv_o = 1'b1;
+          rst_dwgt_o = 1'b1;
+          rst_dens_o = 1'b1;
         end
+        RST_CWGT:
+          rst_cwgt_o = 1'b1;
         RST_CONV:
-          rst_conv_rst = 1'b1;
-        RST_CONV_WEIGHTS:
-          conv_weight_rst_o = 1'b1;
-        TASK_RAM:
-          task_ram_rst = 1'b1;
+          rst_conv_o = 1'b1;
+        RST_DWGT:
+          rst_dwgt_o = 1'b1;
+        RST_DENS:
+          rst_dens_o = 1'b1;
         default:
         begin
-          $error("Invalid reset command");
-          rst_conv_rst = 1'b0;
-          conv_weight_rst_o = 1'b0;
-          task_ram_rst = 1'b0;
+          $error("Invalid reset command, consider using full reset instead");
+          rst_cwgt_o = 1'b1;
+          rst_conv_o = 1'b1;
+          rst_dwgt_o = 1'b1;
+          rst_dens_o = 1'b1;
         end
       endcase
     end
   end
 
-
-  //------------------------------------------------------------------------------------
-  // Write Register Instruction
-  //------------------------------------------------------------------------------------
-  always_comb
-  begin
-    if (cmd_buffer[23:20] == WRITE_REG)
-    begin
-      case (cmd_buffer[19:16])
-        4'h0 :
-          $error("Cannot write to version register");
-        4'h1 :
-          ram_addr_low.full_register = cmd_buffer[15:0];
-        4'h2 :
-          ram_addr_high.full_register = cmd_buffer[15:0];
-        4'h3 :
-          conv_config_1.full_register = cmd_buffer[15:0];
-        4'h4 :
-          conv_config_2.full_register = cmd_buffer[15:0];
-        4'h5 :
-          conv_config_3.full_register = cmd_buffer[15:0];
-        4'h6 :
-          conv_config_4.full_register = cmd_buffer[15:0];
-        4'h7 :
-          $error("Cannot write to status register");
-        // 4'h8 :
-        //   interrupt.write_enable_temp = cmd_buffer[15:0];
-        4'hE :
-          write_to_mem.full_register = cmd_buffer[15:0];
-        4'hF :
-          $error("Cannot write to read from memory register");
-        default:
-          $error("Invalid register write");
-      endcase
-    end
-  end
 
   //------------------------------------------------------------------------------------
   // Read Reset Instruction
@@ -160,9 +130,9 @@ module aether_engine_decoder (
   begin
     data_o = 16'h0000;
 
-    if (cmd_buffer[23:20] == READ_REG)
+    if (instruction == INST_RDR)
     begin
-      case (cmd_buffer[19:16])
+      case (param_1)
         4'h0 :
           data_o = version.full_register;
         4'h1 :
@@ -179,98 +149,135 @@ module aether_engine_decoder (
           data_o = conv_config_4.full_register;
         4'h7 :
           data_o = conv_status.full_register;
-        4'h8 :
-        begin
-          data_o = interrupt.full_register;
-          interrupt.mem_load_active = 1'b0;
-          interrupt.conv_active = 1'b0;
-          interrupt.dense_active = 1'b0;
-        end
         4'hE :
           $error("Cannot read from write to memory register");
         4'hF :
-          data_o = read_from_mem.full_register;
+          data_o = read_from_mem.full_register; // TODO: implement shifting into the register
         default:
           $error("Invalid register read");
       endcase
     end
   end
 
-
+  //------------------------------------------------------------------------------------
+  // Write Register Instruction
+  //------------------------------------------------------------------------------------
+  always_comb
+  begin
+    if (instruction == INST_WRR)
+    begin
+      case (param_1)
+        4'h0 :
+          $error("Cannot write to version register");
+        4'h1 :
+          ram_addr_low.full_register = param_2;
+        4'h2 :
+          ram_addr_high.full_register = param_2;
+        4'h3 :
+          conv_config_1.full_register = param_2;
+        4'h4 :
+          conv_config_2.full_register = param_2;
+        4'h5 :
+          conv_config_3.full_register = param_2;
+        4'h6 :
+          conv_config_4.full_register = param_2;
+        4'h7 :
+          $error("Cannot write to status register");
+        4'hE :
+          write_to_mem.full_register = param_2;
+        4'hF :
+          $error("Cannot write to read from memory register");
+        default:
+          $error("Invalid register write");
+      endcase
+    end
+  end
 
   //------------------------------------------------------------------------------------
-  // Start Task Instruction
+  // Load Weights Instruction
   //------------------------------------------------------------------------------------
-  localparam LOAD_CONV_WEIGHTS = 4'b0000;
-  localparam LOAD_CONV_DATA = 4'b0001;
-  localparam START_CONV = 4'b0010;
-  localparam LOAD_DENSE_WEIGHTS = 4'b0011;
-  localparam LOAD_DENSE_DATA = 4'b0100;
-  localparam START_DENSE = 4'b0101;
-  localparam WRITE_TO_MEM = 4'b0110;
-  localparam READ_FROM_MEM = 4'b0111;
+  localparam LDW_CWGT = 4'd1; // Load Convolution Weights
+  localparam LDW_DWGT = 4'd2; // Load Dense Weights
 
-  logic ram_read_en;
-  logic ram_write_en;
-  logic task_conv_rst;
-  logic [15:0] ram_addr_msb;
+  // ram_addr_high.full_register;
 
-  assign ram_addr_msb = ram_addr_high.full_register;
-
-
-
-  // aether_engine_tasked_ram tasked_ram (
-  //                            .clk_i,
-  //                            .rst_i(task_ram_rst),
-  //                            .addr_i({ram_addr_msb, cmd_buffer[15:0]}),
-
-  //                            // Read
-  //                            .read_en_i(ram_read_en),
-  //                            .task_i(cmd_buffer[19:16]),
-  //                            .data_o(ram_data_o),
-  //                            .task_o(ram_task_o),
-  //                            .data_valid_o(ram_data_valid_o),
-
-  //                            // Write
-  //                            .data_i(64'h55AA55AA55AA55AA), // TODO: This needs to come from the register (maybe a fifo)
-  //                            .write_en_i(ram_write_en),
-  //                            .byte_en_i(8'b1) // If the register is fifo this can be calculated
-  //                          );
 
   always_comb
   begin
-    ram_read_en = 1'b0;
-    ram_write_en = 1'b0;
-    task_conv_rst = 1'b0;
+    ldw_cwgt_o = 1'b0;
+    ldw_dwgt_o = 1'b0;
 
-    if (cmd_buffer[23:20] == START_TASK)
+    if (instruction == INST_LDW)
     begin
-      case (cmd_buffer[19:16])
-        LOAD_CONV_WEIGHTS:
-          ram_read_en = 1'b1;
-        LOAD_CONV_DATA:
-          ram_read_en = 1'b1;
-        START_CONV:
-          task_conv_rst = 1'b1;
-        WRITE_TO_MEM:
-          ram_write_en = 1'b1; // TODO: Others will have to write data too
-        READ_FROM_MEM:
-          ram_read_en = 1'b1;
+      case (param_1)
+        LDW_CWGT:
+          ldw_cwgt_o = 1'b1;
+        LDW_DWGT:
+          ldw_dwgt_o = 1'b1;
         default:
         begin
           $error("Invalid task command");
-          ram_read_en = 1'b0;
-          ram_write_en = 1'b0;
-          task_conv_rst = 1'b0;
+          ldw_cwgt_o = 1'b0;
+          ldw_dwgt_o = 1'b0;
         end
       endcase
     end
   end
 
 
+
   //------------------------------------------------------------------------------------
-  // Merge Signals from Different Instruction Types
+  // Convolve Instruction
   //------------------------------------------------------------------------------------
-  assign conv_rst_o = rst_conv_rst | task_conv_rst;
+
+  always_comb
+  begin
+    cnv_run_o = 1'b0;
+    cnv_count_o = 4'h0;
+
+    if (instruction == INST_CNV)
+    begin
+      if (param_1 == 4'h0)
+      begin
+        $error("Invalid convolution count, must be greater than 0. Preforming a nop instead");
+      end
+      else
+      begin
+        cnv_run_o = 1'b1;
+        cnv_count_o = param_1;
+      end
+    end
+  end
+
+  //------------------------------------------------------------------------------------
+  // Dense Instruction
+  //------------------------------------------------------------------------------------
+
+  always_comb
+  begin
+    dns_run_o = 1'b0;
+    dns_count_o = 4'h0;
+
+    if (instruction == INST_DNS)
+    begin
+      if (param_1 == 4'h0)
+      begin
+        $error("Invalid dense count, must be greater than 0. Preforming a nop instead");
+      end
+      else
+      begin
+        dns_run_o = 1'b1;
+        dns_count_o = param_1;
+      end
+    end
+  end
+
+
+  //------------------------------------------------------------------------------------
+  // Memory Management
+  //------------------------------------------------------------------------------------
+
+  assign mem_load_enable_o = (instruction == INST_LDW || instruction == INST_CNV || instruction == INST_DNS);
+  assign mem_addr_start_o = mem_load_enable_o? {{ram_addr_high.full_register},{param_2}} : 32'h0000;
 
 endmodule

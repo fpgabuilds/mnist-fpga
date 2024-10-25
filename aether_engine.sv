@@ -4,21 +4,98 @@ module aether_engine #(
     //  Convolution Configuration
     parameter MaxMatrixSize = 16383, // maximum matrix size that this convolver can convolve
     parameter KernelSize = 3, // kernel size
-    parameter ConvEngineCount = 1024 // Amount of instantiated convolvers // TODO: add this to an info register and create errors
+    parameter [9:0] ConvEngineCount = 1023, // Amount of instantiated convolvers // TODO: add this to an info register and create errors
+
+    // Memory Configuration
+    parameter ClkRate = 143_000_000
   ) (
     input logic clk_i, // clock
 
     // Control Signals
+    input logic clk_data_i, // clock for input data TODO: implement this so that the main board can run at different speeds then the controller. *(This is a stretch goal)*
     input logic [23:0] cmd_i, // command input
     output logic [15:0] data_o, // data output
 
-    output logic buffer_full_o, // buffer full, do not send any more commands
-    output logic interrupt_o // interrupt signal
+    output logic buffer_full_o, // buffer full, do not input any more commands
+
+
+    // These ports should be connected directly to the SDRAM chip
+    output logic sdram_clk_en_o,
+    output logic [2-1:0] sdram_bank_activate_o,
+    output logic [13-1:0] sdram_address_o,
+    output logic sdram_cs_o,
+    output logic sdram_row_addr_strobe_o,
+    output logic sdram_column_addr_strobe_o,
+    output logic sdram_we_o,
+    output logic [2-1:0] sdram_dqm_o,
+    inout wire [16-1:0] sdram_dq_io
   );
 
-  logic [63:0] ram_data;
-  logic [3:0] ram_task;
-  logic ram_data_valid;
+  localparam real Ratio = DataWidth / 16;
+
+  //------------------------------------------------------------------------------------
+  // Variable Definitions
+  //------------------------------------------------------------------------------------
+
+  // Decoder Interface
+  logic [23:0] current_cmd;
+
+  // Reset Signals
+  logic rst_conv_weight;
+  logic rst_conv;
+  logic rst_dense_weight;
+  logic rst_dense;
+
+  // Load Weights Signals
+  logic load_conv_weights;
+  logic load_dense_weights;
+
+  logic [31:0] conv_weight_mem_count;
+  logic [31:0] dense_weight_mem_count;
+
+  // Convolution Signals
+  logic run_conv;
+  logic [3:0] conv_count;
+  logic [31:0] conv_mem_count;
+
+  logic signed [DataWidth-1:0] conv_data [ConvEngineCount-1:0];
+  logic conv_valid;
+
+  // Dense Signals
+  logic run_dense;
+  logic [3:0] dense_count;
+
+  logic [31:0] dense_mem_count;
+
+  // Memory Signals
+  logic [31:0] mem_addr_start;
+  logic mem_load_enable;
+  logic [15:0] mem_data_read;
+
+  logic mem_data_read_valid;
+  logic mem_data_write_done;
+  logic mem_task_finished;
+
+
+
+
+  //------------------------------------------------------------------------------------
+  // Input Command Buffer
+  //------------------------------------------------------------------------------------
+  // TODO: Let client have a clock and use fifo of differnet clock domains to transfer data
+  // TODO: This needs to wait until the last command is done before accepting a new command
+
+  d_ff #( // Last Command
+         .Width(24)
+       ) d_ff_instruction (
+         .clk_i, //(clk_data_i)
+         .rst_i(1'b0),
+         .en_i(1'b1),
+         .data_i(cmd_i),
+         .data_o(current_cmd)
+       );
+
+  assign buffer_full_o = 1'b0; // TODO: This needs to be calulated based on the fifo buffer
 
   //------------------------------------------------------------------------------------
   // Register Interfaces
@@ -35,37 +112,45 @@ module aether_engine #(
 
   IConvStatus conv_status();
 
-  IInterrupt interrupt();
-
   IWriteToMem write_to_mem();
   IReadFromMem read_from_mem();
-
-  assign interrupt_o = |interrupt.read_active;
 
 
   //------------------------------------------------------------------------------------
   // Convolution Weight Module
   //------------------------------------------------------------------------------------
-  logic conv_weight_rst;
-  logic [DataWidth-1:0] conv_kernel_weights [ConvEngineCount-1:0][KernelSize*KernelSize-1:0];
+  localparam ConvWeightSizeMem = KernelSize * KernelSize * Ratio;
+
+  logic [DataWidth-1:0] conv_kernel_weights_unsigned [ConvEngineCount-1:0][KernelSize*KernelSize-1:0];
+  logic signed [DataWidth-1:0] conv_kernel_weights [ConvEngineCount-1:0][KernelSize*KernelSize-1:0];
+
+  generate
+    for (genvar i = 0; i < ConvEngineCount; i++)
+    begin
+      for (genvar j = 0; j < KernelSize*KernelSize; j++)
+      begin
+        assign conv_kernel_weights[i][j] = $signed(conv_kernel_weights_unsigned[i][j]);
+      end
+    end
+  endgenerate
+
+  assign conv_weight_mem_count = conv_config_1.engine_count * ConvWeightSizeMem; // TODO: seems like a 4 dsp to preform this, fix later
 
 
   // Load data
-  logic conv_weight_write_en;
   logic conv_weight_no_data;
   logic [DataWidth-1:0] conv_weight_data;
-  assign conv_weight_write_en = (ram_task == 4'b0000 && ram_data_valid)? 1'b1 : 1'b0; //LOAD_CONV_WEIGHTS TODO: import this from the decoder
 
   fifo #(
-         .InputWidth(64), // Memory Interface is 64 bits
+         .InputWidth(16), // Memory Interface is 16 bits
          .OutputWidth(DataWidth),
          .Depth(4) // Can store 4 words
        ) conv_weight_fifo (
          .clk_i,
-         .rst_i(conv_weight_rst),
-         .write_en_i(conv_weight_write_en),
+         .rst_i(rst_conv_weight),
+         .write_en_i(load_conv_weights && mem_data_read_valid),
          .read_en_i(1'b1),
-         .data_i(ram_data),
+         .data_i(mem_data_read),
          .data_o(conv_weight_data),
          .full_o(),
          .empty_o(conv_weight_no_data)
@@ -79,10 +164,10 @@ module aether_engine #(
           ) conv_engine_weight_count_inst (
             .clk_i,
             .en_i(1'b1),
-            .rst_i(conv_weight_rst),
+            .rst_i(rst_conv_weight),
             .start_val_i({ConvEngineCountSize{1'b0}}),
             .end_val_i(ConvEngineCount),
-            .count_by_i({{ConvEngineCountSize{1'b0}}, {1'b1}}),
+            .count_by_i({{{ConvEngineCountSize-1}{1'b0}}, {1'b1}}),
             .count_o(conv_weight_count)
           );
 
@@ -100,7 +185,7 @@ module aether_engine #(
                              .rst_val_i({DataWidth{1'b0}}),  // Reset to 0, adjust if needed
                              .data_i(conv_weight_data),
                              .data_o(),
-                             .store_o(conv_kernel_weights[i])
+                             .store_o(conv_kernel_weights_unsigned[i])
                            );
     end
   endgenerate
@@ -110,28 +195,22 @@ module aether_engine #(
   //------------------------------------------------------------------------------------
   // Convolution Module
   //------------------------------------------------------------------------------------
-  logic conv_rst;
+  assign conv_mem_count = conv_config_1.engine_count * conv_config_2.matrix_size * conv_config_2.matrix_size * Ratio * conv_count; // TODO: seems like a 16 dsp to preform this, fix later
 
   // Load data
-  logic activation_write_en;
   logic conv_no_data;
-  logic [DataWidth-1:0] conv_activation_data;
-  assign activation_write_en = (ram_task == 4'b0001 && ram_data_valid)? 1'b1 : 1'b0; //LOAD_CONV_DATA TODO: import this from the decoder
-
-  // Convolution Outputs
-  logic [DataWidth-1:0] conv_data [ConvEngineCount-1:0];
-  logic conv_valid;
+  logic signed [DataWidth-1:0] conv_activation_data;
 
   fifo #(
-         .InputWidth(64), // Memory Interface is 64 bits
+         .InputWidth(16), // Memory Interface is 64 bits
          .OutputWidth(DataWidth),
          .Depth(4) // Can store 4 words
        ) conv_fifo (
          .clk_i,
-         .rst_i(conv_rst),
-         .write_en_i(activation_write_en),
+         .rst_i(rst_conv),
+         .write_en_i(run_conv && mem_data_read_valid),
          .read_en_i(1'b1),
-         .data_i(ram_data),
+         .data_i(mem_data_read),
          .data_o(conv_activation_data),
          .full_o(),
          .empty_o(conv_no_data)
@@ -144,7 +223,7 @@ module aether_engine #(
                       .N(DataWidth)
                     ) conv_layer_inst (
                       .clk_i, // clock
-                      .rst_i(conv_rst), // reset active low
+                      .rst_i(rst_conv), // reset active low
                       .run_i(!conv_no_data), // run the convolution
 
                       // Configuration Registers
@@ -162,7 +241,7 @@ module aether_engine #(
 
                       // Data Outputs
                       .data_o(conv_data), // convolution data output
-                      .conv_valid(conv_valid) // convolution valid
+                      .conv_valid_o(conv_valid) // convolution valid
                     );
 
 
@@ -170,17 +249,12 @@ module aether_engine #(
   // Instruction Decoder Module
   //------------------------------------------------------------------------------------
 
-
-
-
   aether_engine_decoder decode_inst (
                           .clk_i,
 
                           // Control Signals
-                          .cmd_i, // command input
+                          .cmd_i(current_cmd), // command input
                           .data_o, // data output
-
-                          .buffer_full_o, // buffer full, do not send any more commands
 
                           // Register Variables
                           .version,
@@ -191,21 +265,86 @@ module aether_engine #(
                           .conv_config_3,
                           .conv_config_4,
                           .conv_status,
-                          .interrupt,
                           .write_to_mem,
                           .read_from_mem,
 
-                          // Convolution Weight Variables
-                          .conv_weight_rst_o(conv_weight_rst),
+
+                          // Reset Variables
+                          .rst_cwgt_o(rst_conv_weight),
+                          .rst_conv_o(rst_conv),
+                          .rst_dwgt_o(rst_dense_weight),
+                          .rst_dens_o(rst_dense),
+
+                          // Load Weights Variables
+                          .ldw_cwgt_o(load_conv_weights),
+                          .ldw_dwgt_o(load_dense_weights),
 
                           // Convolution Variables
-                          .conv_rst_o(conv_rst),
+                          .cnv_run_o(run_conv),
+                          .cnv_count_o(conv_count),
 
-                          // Ram Output
-                          .ram_data_o(ram_data),
-                          .ram_task_o(ram_task),
-                          .ram_data_valid_o(ram_data_valid)
+                          // Dense Variables
+                          .dns_run_o(run_dense),
+                          .dns_count_o(dense_count),
+
+                          // Memory Variables
+                          .mem_addr_start_o(mem_addr_start),
+                          .mem_load_enable_o(mem_load_enable)
                         );
+
+
+  //------------------------------------------------------------------------------------
+  // Memory Interface
+  //------------------------------------------------------------------------------------
+  localparam IDLE = 2'b00;
+  localparam WRITE = 2'b01;
+  localparam READ = 2'b10;
+
+  logic [1:0] command;
+  logic [15:0] data_write;
+  logic [31:0] count_total;
+
+  assign command = mem_load_enable? READ : IDLE;
+  assign data_write = 16'b0; // TODO: Implement this
+
+  always_comb
+  begin
+    count_total = 32'b0;
+
+    if (load_conv_weights)
+      count_total = conv_weight_mem_count;
+    else if (load_dense_weights)
+      count_total = dense_weight_mem_count;
+    else if (run_conv)
+      count_total = conv_mem_count;
+    else if (run_dense)
+      count_total = dense_mem_count; // TODO: this depends on 1x1 or dense mode
+  end
+
+  aether_engine_generic_mem #(
+                              .ClkRate(ClkRate)
+                            ) sys_ram_inst (
+                              .clk_i,
+                              .command_i(command),
+                              .start_address_i(mem_addr_start),
+                              .count_total_i(count_total),
+                              .data_write_i(data_write),
+                              .data_read_o(mem_data_read),
+                              .data_read_valid_o(mem_data_read_valid),
+                              .data_write_done_o(mem_data_write_done),
+                              .task_finished_o(mem_task_finished),
+
+                              // These ports should be connected directly to the SDRAM chip
+                              .sdram_clk_en_o,
+                              .sdram_bank_activate_o,
+                              .sdram_address_o,
+                              .sdram_cs_o,
+                              .sdram_row_addr_strobe_o,
+                              .sdram_column_addr_strobe_o,
+                              .sdram_we_o,
+                              .sdram_dqm_o,
+                              .sdram_dq_io
+                            );
 endmodule
 
 
