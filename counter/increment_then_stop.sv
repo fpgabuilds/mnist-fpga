@@ -1,7 +1,7 @@
 // When reset is inbetween clock edges the counter will reset but on the next clock edge it will increment
 // This will make the counter look like it is starting from start_val_i + 1 when only looking at the positive clock pulses
 module increment_then_stop #(
-    parameter Bits = 8 // Number of bits in the counter, this can be found using $clog2(N) where N is the maximum value of the counter
+    parameter Bits = 8 // Number of bits in the counter, this can be found using $clog2(N+1) where N is the maximum value of the counter
   ) (
     input logic clk_i, // Clock input
     input logic run_i, // Run signal, when high the counter will increment, when low the counter will not change but will hold the current value

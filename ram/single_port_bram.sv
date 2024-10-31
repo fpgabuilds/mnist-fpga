@@ -6,7 +6,7 @@ module single_port_bram #(
   ) (
     input logic clk_i,
     input logic write_en_i,
-    input logic [$clog2(Depth):0] addr_i,
+    input logic [$clog2(Depth+1)-1:0] addr_i,
     input logic [DataWidth-1:0] data_i,
     output logic [DataWidth-1:0] data_o
   );

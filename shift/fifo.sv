@@ -14,9 +14,9 @@ module fifo #(
   );
 
   // Local parameters
-  localparam AddrWidth = $clog2(Depth) + 1;
+  localparam AddrWidth = $clog2(Depth + 1);
   localparam Ratio = InputWidth / OutputWidth;
-  localparam RatioWidth = $clog2(Ratio) + 1;
+  localparam RatioWidth = $clog2(Ratio + 1);
 
   // Internal signals
   logic [InputWidth-1:0] store [Depth-1:0];

@@ -38,7 +38,7 @@ module dense_layer #(
 
 
       increment_then_stop #(
-                            .Bits(6) // Number of bits in the counter, this can be found using $clog2(N) where N is the maximum value of the counter
+                            .Bits(6) // Number of bits in the counter, this can be found using $clog2(N+1) where N is the maximum value of the counter
                           ) (
                             .clk_i, // Clock input
                             .run_i(shifted), // Run signal, when high the counter will increment, when low the counter will not change but will hold the current value

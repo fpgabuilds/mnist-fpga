@@ -114,7 +114,7 @@ module convolver #(
   logic stride_conv;
 
   // Count the amount of clock cycles used in the convolution
-  localparam ClkCountSize = $clog2(MaxMatrixSize*MaxMatrixSize + 1) + 1;
+  localparam ClkCountSize = $clog2(MaxMatrixSize*MaxMatrixSize + 2);
 
   logic [ClkCountSize-1:0] max_clk_count;
   logic [ClkCountSize-1:0] clk_count;
@@ -137,8 +137,8 @@ module convolver #(
 
 
   // Count valid and invalid convolution outputs per row
-  localparam ConvCountSize = $clog2(MaxMatrixSize-KernelSize) + 1;
-  localparam InvConcCountSize = $clog2(KernelSize-2) + 1;
+  localparam ConvCountSize = $clog2(MaxMatrixSize - KernelSize + 1);
+  localparam InvConcCountSize = $clog2(KernelSize - 1); // KernelSize - 2 ( + 1 for the 0 index)
 
   logic [ConvCountSize-1:0] max_conv_count;
   logic [ConvCountSize-1:0] conv_count;
@@ -184,7 +184,7 @@ module convolver #(
 
 
   // Count the amount of output rows done in the convolution
-  localparam RowCountSize = $clog2(MaxMatrixSize-KernelSize) + 1;
+  localparam RowCountSize = $clog2(MaxMatrixSize - KernelSize + 1);
 
   logic [RowCountSize-1:0] max_row_count;
   logic [RowCountSize-1:0] row_count;

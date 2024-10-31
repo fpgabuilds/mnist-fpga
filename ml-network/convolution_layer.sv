@@ -52,7 +52,7 @@ module convolution_layer #(
 
 
   localparam ConvOutputCount = (MaxMatrixSize-KernelSize+1)**2;
-  localparam ConvOutputSize = $clog2(ConvOutputCount) + 1;
+  localparam ConvOutputSize = $clog2(ConvOutputCount + 1);
 
   logic [EngineCount-1:0] conv_done;
   logic [ConvOutputSize-1:0] conv_counter;

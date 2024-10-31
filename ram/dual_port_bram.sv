@@ -9,12 +9,12 @@ module dual_port_bram #(
     input logic clk_i,
     // Port A
     input logic a_write_en_i,
-    input logic [$clog2(Depth):0] a_addr_i,
+    input logic [$clog2(Depth+1)-1:0] a_addr_i,
     input logic [DataWidth-1:0] a_data_i,
     output logic [DataWidth-1:0] a_data_o,
     // Port B
     input logic b_write_en_i,
-    input logic [$clog2(Depth):0] b_addr_i,
+    input logic [$clog2(Depth+1)-1:0] b_addr_i,
     input logic [DataWidth-1:0] b_data_i,
     output logic [DataWidth-1:0] b_data_o
   );
@@ -53,8 +53,8 @@ module dual_port_bram2 #(
     parameter BDataWidth = 8,
     parameter BitDepth = 1024,
 
-    parameter AAddrSize = $clog2(BitDepth / ADataWidth) + 1,
-    parameter BAddrSize = $clog2(BitDepth / BDataWidth) + 1
+    parameter AAddrSize = $clog2((BitDepth / ADataWidth) + 1),
+    parameter BAddrSize = $clog2((BitDepth / BDataWidth) + 1)
   ) (
     // Port A
     input logic a_clk_i,

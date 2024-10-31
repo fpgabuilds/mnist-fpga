@@ -36,7 +36,7 @@ module aether_engine #(
     inout wire [15:0] sdram_dq_io
   );
 
-  localparam real Ratio = DataWidth / 16;
+`include "aether_constants.sv";
 
   //------------------------------------------------------------------------------------
   // Variable Definitions
@@ -82,14 +82,35 @@ module aether_engine #(
   logic mem_task_finished;
 
 
+  localparam real Ratio = DataWidth / 16;
 
   //------------------------------------------------------------------------------------
-  // Input Buffer
+  // Register Interfaces
+  //------------------------------------------------------------------------------------
+
+  IVersion version();
+  IRamAddrLow ram_addr_low();
+  IRamAddrHigh ram_addr_high();
+
+  IConvConfig1 conv_config_1();
+  IConvConfig2 conv_config_2();
+  IConvConfig3 conv_config_3();
+  IConvConfig4 conv_config_4();
+
+  IConvStatus conv_status();
+
+  IWriteToMem write_to_mem();
+  IReadFromMem read_from_mem();
+
+
+
+  //------------------------------------------------------------------------------------
+  // Input Data Buffer
   //------------------------------------------------------------------------------------
 
   localparam InputBufferBits = MaxMatrixSize**2 * DataWidth;
-  localparam AAddrSize = $clog2(InputBufferBits / 16) + 1;
-  localparam BAddrSize = $clog2(InputBufferBits / DataWidth) + 1;
+  localparam AAddrSize = $clog2((InputBufferBits / 16) + 1);
+  localparam BAddrSize = $clog2((InputBufferBits / DataWidth) + 1);
 
   logic [AAddrSize-1:0] input_buffer_addr;
   logic load_from_input_buffer;
@@ -100,8 +121,8 @@ module aether_engine #(
                    .Bits(AAddrSize)
                  ) (
                    .clk_i(clk_data_i),
-                   .en_i(instruction_i == 4'h7 && param_1 == 4'h1), // Continue load input buffer
-                   .rst_i(instruction_i == 4'h7 && param_1 == 4'h0), // Start load input buffer
+                   .en_i(instruction_i == LIP && param_1 == LIP_CONT), // Continue load input buffer
+                   .rst_i(instruction_i == LIP && param_1 == LIP_STRT), // Start load input buffer
                    .count_o(input_buffer_addr)
                  );
 
@@ -137,44 +158,6 @@ module aether_engine #(
                     .b_data_o(input_buffer_data)
                   );
 
-
-
-
-  //------------------------------------------------------------------------------------
-  // Input Command Buffer
-  //------------------------------------------------------------------------------------
-  // TODO: Let client have a clock and use fifo of differnet clock domains to transfer data
-  // TODO: This needs to wait until the last command is done before accepting a new command
-
-  d_ff #( // Last Command
-         .Width(24)
-       ) d_ff_instruction (
-         .clk_i, //(clk_data_i)
-         .rst_i(1'b0),
-         .en_i(1'b1),
-         .data_i(cmd_i),
-         .data_o(current_cmd)
-       );
-
-  assign buffer_full_o = 1'b0; // TODO: This needs to be calulated based on the fifo buffer
-
-  //------------------------------------------------------------------------------------
-  // Register Interfaces
-  //------------------------------------------------------------------------------------
-
-  IVersion version();
-  IRamAddrLow ram_addr_low();
-  IRamAddrHigh ram_addr_high();
-
-  IConvConfig1 conv_config_1();
-  IConvConfig2 conv_config_2();
-  IConvConfig3 conv_config_3();
-  IConvConfig4 conv_config_4();
-
-  IConvStatus conv_status();
-
-  IWriteToMem write_to_mem();
-  IReadFromMem read_from_mem();
 
 
   //------------------------------------------------------------------------------------
@@ -218,7 +201,7 @@ module aether_engine #(
          .empty_o(conv_weight_no_data)
        );
 
-  localparam ConvEngineCountSize = $clog2(ConvEngineCount) + 1;
+  localparam ConvEngineCountSize = $clog2(ConvEngineCount + 1);
   logic [ConvEngineCountSize-1:0] conv_weight_count;
 
   counter #(
