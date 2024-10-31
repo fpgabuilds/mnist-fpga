@@ -1,28 +1,26 @@
 // TODO: get these to reset with an instruction to a default value
 
 // Register: 0x01
-// Direction: read
+// Direction: Read Only
 // Description: Version Register
-// Initial Value: 0x0001
 interface IVersion;
   logic [15:0] full_register;
-  logic [5:0] major;
-  logic [7:0] minor;
-  logic [3:0] patch;
+  logic [7:0] chip_id;
+  logic [4:0] major;
+  logic [2:0] minor;
 
-  modport read (output major, minor, patch);
+  modport read (output chip_id, major, minor);
   modport read_full (output full_register);
+  modport write (input full_register); // Not to be accessed by the user
 
-  assign major = full_register[15:11];
-  assign minor = full_register[10:3];
-  assign patch = full_register[2:0];
-  assign full_register = 16'h0001;
+  assign chip_id = full_register[15:8];
+  assign major = full_register[7:3];
+  assign minor = full_register[2:0];
 endinterface
 
 // Register: 0x01
 // Direction: read/write
 // Description: Ram Address Lower Register
-// Initial Value: 0x0000
 interface IRamAddrLow;
   logic [15:0] full_register;
   logic [15:0] address;
@@ -37,7 +35,6 @@ endinterface
 // Register: 0x02
 // Direction: read/write
 // Description: Ram Address Upper Register
-// Initial Value: 0x0000
 interface IRamAddrHigh;
   logic [15:0] full_register;
   logic [15:0] address;
@@ -52,7 +49,6 @@ endinterface
 // Register: 0x03
 // Direction: read/write
 // Description: Convolution Configuration Register 1
-// Initial Value: 0x0401
 interface IConvConfig1;
   logic [15:0] full_register;
   logic [5:0] stride;

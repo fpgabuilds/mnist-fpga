@@ -1,34 +1,39 @@
 module aether_engine #(
     parameter DataWidth = 8,
 
-    //  Convolution Configuration
-    parameter MaxMatrixSize = 16383, // maximum matrix size that this convolver can convolve
-    parameter KernelSize = 3, // kernel size
+    // Convolution Configuration
+    parameter [13:0] MaxMatrixSize = 16383, // maximum matrix size that this convolver can convolve
     parameter [9:0] ConvEngineCount = 1023, // Amount of instantiated convolvers // TODO: add this to an info register and create errors
+
+    // Dense Configuration
+    parameter DenseEngineCount = 1024, // Amount of instantiated dense layers // TODO: add this to an info register and create errors
 
     // Memory Configuration
     parameter ClkRate = 143_000_000
   ) (
     input logic clk_i, // clock
+    input logic clk_data_i, // clock for input data TODO: implement this so that the main board can run at different speeds then the controller. *(This is a stretch goal)*
+    // assign clk_data_i = clk_i; they should be set to the same for now
 
     // Control Signals
-    input logic clk_data_i, // clock for input data TODO: implement this so that the main board can run at different speeds then the controller. *(This is a stretch goal)*
-    input logic [23:0] cmd_i, // command input
-    output logic [15:0] data_o, // data output
+    input logic [3:0] instruction_i, // instruction input
+    input logic [3:0] param_1_i, // parameter 1 input
+    input logic [15:0] param_2_i, // parameter 2 input
 
-    output logic buffer_full_o, // buffer full, do not input any more commands
+    output logic [15:0] data_o, // data output
+    output logic interrupt_o, // buffer full, do not input any more commands
 
 
     // These ports should be connected directly to the SDRAM chip
     output logic sdram_clk_en_o,
-    output logic [2-1:0] sdram_bank_activate_o,
-    output logic [13-1:0] sdram_address_o,
+    output logic [1:0] sdram_bank_activate_o,
+    output logic [12:0] sdram_address_o,
     output logic sdram_cs_o,
     output logic sdram_row_addr_strobe_o,
     output logic sdram_column_addr_strobe_o,
     output logic sdram_we_o,
-    output logic [2-1:0] sdram_dqm_o,
-    inout wire [16-1:0] sdram_dq_io
+    output logic [1:0] sdram_dqm_o,
+    inout wire [15:0] sdram_dq_io
   );
 
   localparam real Ratio = DataWidth / 16;
@@ -78,6 +83,62 @@ module aether_engine #(
 
 
 
+  //------------------------------------------------------------------------------------
+  // Input Buffer
+  //------------------------------------------------------------------------------------
+
+  localparam InputBufferBits = MaxMatrixSize**2 * DataWidth;
+  localparam AAddrSize = $clog2(InputBufferBits / 16) + 1;
+  localparam BAddrSize = $clog2(InputBufferBits / DataWidth) + 1;
+
+  logic [AAddrSize-1:0] input_buffer_addr;
+  logic load_from_input_buffer;
+  logic [BAddrSize-1:0] input_buffer_count;
+  logic [DataWidth-1:0] input_buffer_data;
+
+  simple_counter #(
+                   .Bits(AAddrSize)
+                 ) (
+                   .clk_i(clk_data_i),
+                   .en_i(instruction_i == 4'h7 && param_1 == 4'h1), // Continue load input buffer
+                   .rst_i(instruction_i == 4'h7 && param_1 == 4'h0), // Start load input buffer
+                   .count_o(input_buffer_addr)
+                 );
+
+  increment_then_stop #(
+                        .Bits(BAddrSize)
+                      ) (
+                        .clk_i,
+                        .run_i(load_from_input_buffer),
+                        .rst_i(rst_conv),
+                        .start_val_i({BAddrSize{1'b0}}),
+                        .end_val_i(InputBufferBits / DataWidth),
+                        .count_o(input_buffer_count)
+                      );
+
+  dual_port_bram2 #(
+                    .ADataWidth(16),
+                    .BDataWidth(DataWidth),
+                    .BitDepth(InputBufferBits),
+                    .AAddrSize(AAddrSize),
+                    .BAddrSize(BAddrSize)
+                  ) (
+                    // Port A
+                    .a_clk_i(clk_data_i),
+                    .a_write_en_i(instruction_i == 4'h7),
+                    .a_addr_i(input_buffer_addr),
+                    .a_data_i(param_2_i),
+                    .a_data_o(),
+                    // Port B
+                    .b_clk_i(clk_i),
+                    .b_write_en_i(1'b0),
+                    .b_addr_i(input_buffer_count),
+                    .b_data_i({BAddrSize{1'b0}}),
+                    .b_data_o(input_buffer_data)
+                  );
+
+
+
 
   //------------------------------------------------------------------------------------
   // Input Command Buffer
@@ -119,6 +180,7 @@ module aether_engine #(
   //------------------------------------------------------------------------------------
   // Convolution Weight Module
   //------------------------------------------------------------------------------------
+  localparam KernelSize = 3;
   localparam ConvWeightSizeMem = KernelSize * KernelSize * Ratio;
 
   logic [DataWidth-1:0] conv_kernel_weights_unsigned [ConvEngineCount-1:0][KernelSize*KernelSize-1:0];
@@ -243,6 +305,24 @@ module aether_engine #(
                       .data_o(conv_data), // convolution data output
                       .conv_valid_o(conv_valid) // convolution valid
                     );
+
+  ///--------------------------------------------------------------------------------------------
+  // Dense Layer
+  //--------------------------------------------------------------------------------------------
+
+  dense_layer #(
+                .N(16),
+                .EngineCount(1024)
+              ) (
+                .clk_i,
+                .rst_i(),
+                .en_i(),
+                .value_i(),
+                .weight_i(),
+                .dense_o(),
+
+                .config_1_i()  //accum = 1 for 1x1 conv, and 0 for dense
+              );
 
 
   //------------------------------------------------------------------------------------

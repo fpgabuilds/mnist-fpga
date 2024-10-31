@@ -1,6 +1,8 @@
+// The dense layer uses activation stationary to do the math, the weights should be looped through
+
 module dense_layer #(
     parameter N = 16,
-    parameter EngineCount = 1024
+    parameter [11:0] EngineCount = 4095
   ) (
     input logic clk_i,
     input logic rst_i,
