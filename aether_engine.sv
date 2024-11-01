@@ -88,20 +88,42 @@ module aether_engine #(
   // Register Interfaces
   //------------------------------------------------------------------------------------
 
-  IVersion version();
-  IRamAddrLow ram_addr_low();
-  IRamAddrHigh ram_addr_high();
+  logic reg_reset;
 
-  IConvConfig1 conv_config_1();
-  IConvConfig2 conv_config_2();
-  IConvConfig3 conv_config_3();
-  IConvConfig4 conv_config_4();
+  IVersn reg_versn(.ResetValue(16'h6C00));
+  IHwrid reg_hwrid(.ResetValue(16'hB2E9));
+  IMemup reg_memup(.ResetValue(16'h0000));
+  IMstrt reg_mstrt(.ResetValue(16'h0000));
+  IMendd reg_mendd(.ResetValue(16'h0000));
+  IBcfg1 reg_bcfg1(.ResetValue(16'h0001));
+  IBcfg2 reg_bcfg2(.ResetValue(16'h0000));
+  IBcfg3 reg_bcfg3(.ResetValue(16'h0000));
+  ICprm1 reg_cprm1(.ResetValue(16'h0040));
+  IStats reg_stats(.ResetValue(16'h2240));
 
-  IConvStatus conv_status();
+  assign reg_memup.reg_ctrl.clk_i = clk_i;
+  assign reg_memup.reg_ctrl.rst_i = reg_reset;
 
-  IWriteToMem write_to_mem();
-  IReadFromMem read_from_mem();
+  assign reg_mstrt.reg_ctrl.clk_i = clk_i;
+  assign reg_mstrt.reg_ctrl.rst_i = reg_reset;
 
+  assign reg_mendd.reg_ctrl.clk_i = clk_i;
+  assign reg_mendd.reg_ctrl.rst_i = reg_reset;
+
+  assign reg_bcfg1.reg_ctrl.clk_i = clk_i;
+  assign reg_bcfg1.reg_ctrl.rst_i = reg_reset;
+
+  assign reg_bcfg2.reg_ctrl.clk_i = clk_i;
+  assign reg_bcfg2.reg_ctrl.rst_i = reg_reset;
+
+  assign reg_bcfg3.reg_ctrl.clk_i = clk_i;
+  assign reg_bcfg3.reg_ctrl.rst_i = reg_reset;
+
+  assign reg_cprm1.reg_ctrl.clk_i = clk_i;
+  assign reg_cprm1.reg_ctrl.rst_i = reg_reset;
+
+  assign reg_stats.reg_ctrl.clk_i = clk_i;
+  assign reg_stats.reg_ctrl.rst_i = reg_reset;
 
 
   //------------------------------------------------------------------------------------
@@ -179,7 +201,7 @@ module aether_engine #(
     end
   endgenerate
 
-  assign conv_weight_mem_count = conv_config_1.engine_count * ConvWeightSizeMem; // TODO: seems like a 4 dsp to preform this, fix later
+  assign conv_weight_mem_count = IBcfg1.read.engine_count * ConvWeightSizeMem; // TODO: seems like a 4 dsp to preform this, fix later
 
 
   // Load data
@@ -240,7 +262,7 @@ module aether_engine #(
   //------------------------------------------------------------------------------------
   // Convolution Module
   //------------------------------------------------------------------------------------
-  assign conv_mem_count = conv_config_1.engine_count * conv_config_2.matrix_size * conv_config_2.matrix_size * Ratio * conv_count; // TODO: seems like a 16 dsp to preform this, fix later
+  assign conv_mem_count = IBcfg1.read.engine_count * IBcfg2.read.matrix_size ** 2 * Ratio * conv_count; // TODO: seems like a 16 dsp to preform this, fix later
 
   // Load data
   logic conv_no_data;
@@ -316,27 +338,37 @@ module aether_engine #(
                           .clk_i,
 
                           // Control Signals
-                          .cmd_i(current_cmd), // command input
+                          .instruction_i, // instruction input
+                          .param_1_i, // parameter 1 input
+                          .param_2_i, // parameter 2 input
                           .data_o, // data output
 
                           // Register Variables
-                          .version,
-                          .ram_addr_low,
-                          .ram_addr_high,
-                          .conv_config_1,
-                          .conv_config_2,
-                          .conv_config_3,
-                          .conv_config_4,
-                          .conv_status,
-                          .write_to_mem,
-                          .read_from_mem,
-
+                          .reg_versn_i(reg_versn.read_full),
+                          .reg_hwrid_i(reg_hwrid.read_full),
+                          .reg_memup_i(reg_memup.read_full),
+                          .reg_mstrt_i(reg_mstrt.read_full),
+                          .reg_mendd_i(reg_mendd.read_full),
+                          .reg_bcfg1_i(reg_bcfg1.read_full),
+                          .reg_bcfg2_i(reg_bcfg2.read_full),
+                          .reg_bcfg3_i(reg_bcfg3.read_full),
+                          .reg_cprm1_i(reg_cprm1.read_full),
+                          .reg_stats_i(reg_stats.read_full),
+                          .reg_memup_o(reg_memup.write_ext),
+                          .reg_mstrt_o(reg_mstrt.write_ext),
+                          .reg_mendd_o(reg_mendd.write_ext),
+                          .reg_bcfg1_o(reg_bcfg1.write_ext),
+                          .reg_bcfg2_o(reg_bcfg2.write_ext),
+                          .reg_bcfg3_o(reg_bcfg3.write_ext),
+                          .reg_cprm1_o(reg_cprm1.write_ext),
+                          .reg_stats_o(reg_stats.write_ext),
 
                           // Reset Variables
                           .rst_cwgt_o(rst_conv_weight),
                           .rst_conv_o(rst_conv),
                           .rst_dwgt_o(rst_dense_weight),
                           .rst_dens_o(rst_dense),
+                          .rst_regs_o(rst_regs),
 
                           // Load Weights Variables
                           .ldw_cwgt_o(load_conv_weights),
