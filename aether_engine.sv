@@ -90,40 +90,40 @@ module aether_engine #(
 
   logic reg_reset;
 
-  IVersn reg_versn(.ResetValue(16'h6C00));
-  IHwrid reg_hwrid(.ResetValue(16'hB2E9));
-  IMemup reg_memup(.ResetValue(16'h0000));
-  IMstrt reg_mstrt(.ResetValue(16'h0000));
-  IMendd reg_mendd(.ResetValue(16'h0000));
-  IBcfg1 reg_bcfg1(.ResetValue(16'h0001));
-  IBcfg2 reg_bcfg2(.ResetValue(16'h0000));
-  IBcfg3 reg_bcfg3(.ResetValue(16'h0000));
-  ICprm1 reg_cprm1(.ResetValue(16'h0040));
-  IStats reg_stats(.ResetValue(16'h2240));
+  IVersn #(.ResetValue(16'h6C00)) reg_versn();
+  IHwrid #(.ResetValue(16'hB2E9)) reg_hwrid();
+  IMemup #(.ResetValue(16'h0000)) reg_memup();
+  IMstrt #(.ResetValue(16'h0000)) reg_mstrt();
+  IMendd #(.ResetValue(16'h0000)) reg_mendd();
+  IBcfg1 #(.ResetValue(16'h0001)) reg_bcfg1();
+  IBcfg2 #(.ResetValue(16'h0000)) reg_bcfg2();
+  IBcfg3 #(.ResetValue(16'h0000)) reg_bcfg3();
+  ICprm1 #(.ResetValue(16'h0040)) reg_cprm1();
+  IStats #(.ResetValue(16'h2240)) reg_stats();
 
-  assign reg_memup.reg_ctrl.clk_i = clk_i;
-  assign reg_memup.reg_ctrl.rst_i = reg_reset;
+  assign reg_memup.clk_i = clk_i;
+  assign reg_memup.rst_i = reg_reset;
 
-  assign reg_mstrt.reg_ctrl.clk_i = clk_i;
-  assign reg_mstrt.reg_ctrl.rst_i = reg_reset;
+  assign reg_mstrt.clk_i = clk_i;
+  assign reg_mstrt.rst_i = reg_reset;
 
-  assign reg_mendd.reg_ctrl.clk_i = clk_i;
-  assign reg_mendd.reg_ctrl.rst_i = reg_reset;
+  assign reg_mendd.clk_i = clk_i;
+  assign reg_mendd.rst_i = reg_reset;
 
-  assign reg_bcfg1.reg_ctrl.clk_i = clk_i;
-  assign reg_bcfg1.reg_ctrl.rst_i = reg_reset;
+  assign reg_bcfg1.clk_i = clk_i;
+  assign reg_bcfg1.rst_i = reg_reset;
 
-  assign reg_bcfg2.reg_ctrl.clk_i = clk_i;
-  assign reg_bcfg2.reg_ctrl.rst_i = reg_reset;
+  assign reg_bcfg2.clk_i = clk_i;
+  assign reg_bcfg2.rst_i = reg_reset;
 
-  assign reg_bcfg3.reg_ctrl.clk_i = clk_i;
-  assign reg_bcfg3.reg_ctrl.rst_i = reg_reset;
+  assign reg_bcfg3.clk_i = clk_i;
+  assign reg_bcfg3.rst_i = reg_reset;
 
-  assign reg_cprm1.reg_ctrl.clk_i = clk_i;
-  assign reg_cprm1.reg_ctrl.rst_i = reg_reset;
+  assign reg_cprm1.clk_i = clk_i;
+  assign reg_cprm1.rst_i = reg_reset;
 
-  assign reg_stats.reg_ctrl.clk_i = clk_i;
-  assign reg_stats.reg_ctrl.rst_i = reg_reset;
+  assign reg_stats.clk_i = clk_i;
+  assign reg_stats.rst_i = reg_reset;
 
 
   //------------------------------------------------------------------------------------
@@ -141,7 +141,7 @@ module aether_engine #(
 
   simple_counter #(
                    .Bits(AAddrSize)
-                 ) (
+                 ) simple_counter_inst (
                    .clk_i(clk_data_i),
                    .en_i(instruction_i == LIP && param_1 == LIP_CONT), // Continue load input buffer
                    .rst_i(instruction_i == LIP && param_1 == LIP_STRT), // Start load input buffer
@@ -150,7 +150,7 @@ module aether_engine #(
 
   increment_then_stop #(
                         .Bits(BAddrSize)
-                      ) (
+                      ) data_buffer_counter_inst (
                         .clk_i,
                         .run_i(load_from_input_buffer),
                         .rst_i(rst_conv),
@@ -165,7 +165,7 @@ module aether_engine #(
                     .BitDepth(InputBufferBits),
                     .AAddrSize(AAddrSize),
                     .BAddrSize(BAddrSize)
-                  ) (
+                  ) input_buffer_bram (
                     // Port A
                     .a_clk_i(clk_data_i),
                     .a_write_en_i(instruction_i == 4'h7),
@@ -201,7 +201,7 @@ module aether_engine #(
     end
   endgenerate
 
-  assign conv_weight_mem_count = IBcfg1.read.engine_count * ConvWeightSizeMem; // TODO: seems like a 4 dsp to preform this, fix later
+  assign conv_weight_mem_count = reg_bcfg1.engine_count_o * ConvWeightSizeMem; // TODO: seems like a 4 dsp to preform this, fix later
 
 
   // Load data
@@ -262,7 +262,7 @@ module aether_engine #(
   //------------------------------------------------------------------------------------
   // Convolution Module
   //------------------------------------------------------------------------------------
-  assign conv_mem_count = IBcfg1.read.engine_count * IBcfg2.read.matrix_size ** 2 * Ratio * conv_count; // TODO: seems like a 16 dsp to preform this, fix later
+  assign conv_mem_count = reg_bcfg1.engine_count_o * reg_bcfg2.matrix_size_o ** 2 * Ratio * conv_count; // TODO: seems like a 16 dsp to preform this, fix later
 
   // Load data
   logic conv_no_data;
@@ -318,7 +318,7 @@ module aether_engine #(
   dense_layer #(
                 .N(16),
                 .EngineCount(1024)
-              ) (
+              ) dense_inst (
                 .clk_i,
                 .rst_i(),
                 .en_i(),

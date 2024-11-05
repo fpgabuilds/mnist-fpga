@@ -15,9 +15,9 @@ interface IVersn #(
 
   assign register_o = ResetValue;
 
-  assign chip_id = register_o[15:8];
-  assign major = register_o[7:3];
-  assign minor = register_o[2:0];
+  assign chip_id_o = register_o[15:8];
+  assign major_o = register_o[7:3];
+  assign minor_o = register_o[2:0];
 
 endinterface
 
@@ -36,7 +36,7 @@ interface IHwrid #(
 
   assign register_o = ResetValue;
 
-  assign uid = register_o;
+  assign uid_o = register_o;
 endinterface
 
 // Register: 0x2
@@ -59,16 +59,17 @@ interface IMemup #(
   modport write_ext (input register_o, we_i);
   modport reg_ctrl (input clk_i, rst_i);
 
-  d_ff_rst #(
-             .Width(16)
-           ) memup_ff (
-             .clk_i,
-             .rst_i,
-             .en_i(we_i),
-             .rst_val_i(ResetValue),
-             .data_i(register_i),
-             .data_o(register_o)
-           );
+  always_ff @(posedge clk_i or posedge rst_i)
+  begin
+    if (rst_i)
+    begin
+      register_o <= ResetValue;
+    end
+    else if (we_i)
+    begin
+      register_o <= register_i;
+    end
+  end
 
   assign mem_upper_o = register_o;
 endinterface
@@ -93,16 +94,17 @@ interface IMstrt #(
   modport write_ext (input register_o, we_i);
   modport reg_ctrl (input clk_i, rst_i);
 
-  d_ff_rst #(
-             .Width(16)
-           ) mstrt_ff (
-             .clk_i,
-             .rst_i,
-             .en_i(we_i),
-             .rst_val_i(ResetValue),
-             .data_i(register_i),
-             .data_o(register_o)
-           );
+  always_ff @(posedge clk_i or posedge rst_i)
+  begin
+    if (rst_i)
+    begin
+      register_o <= ResetValue;
+    end
+    else if (we_i)
+    begin
+      register_o <= register_i;
+    end
+  end
 
   assign mem_start_o = register_o;
 endinterface
@@ -127,16 +129,17 @@ interface IMendd #(
   modport write_ext (input register_o, we_i);
   modport reg_ctrl (input clk_i, rst_i);
 
-  d_ff_rst #(
-             .Width(16)
-           ) mendd_ff (
-             .clk_i,
-             .rst_i,
-             .en_i(we_i),
-             .rst_val_i(ResetValue),
-             .data_i(register_i),
-             .data_o(register_o)
-           );
+  always_ff @(posedge clk_i or posedge rst_i)
+  begin
+    if (rst_i)
+    begin
+      register_o <= ResetValue;
+    end
+    else if (we_i)
+    begin
+      register_o <= register_i;
+    end
+  end
 
   assign mem_end_o = register_o;
 endinterface
@@ -162,16 +165,17 @@ interface IBcfg1 #(
   modport write_ext (input register_i, we_i);
   modport reg_ctrl (input clk_i, rst_i);
 
-  d_ff_rst #(
-             .Width(16)
-           ) bcfg1_ff (
-             .clk_i,
-             .rst_i,
-             .en_i(we_i),
-             .rst_val_i(ResetValue),
-             .data_i(register_i),
-             .data_o(register_o)
-           );
+  always_ff @(posedge clk_i or posedge rst_i)
+  begin
+    if (rst_i)
+    begin
+      register_o <= ResetValue;
+    end
+    else if (we_i)
+    begin
+      register_o <= register_i;
+    end
+  end
 
   assign shift_low_o = register_o[15:12];
   assign engine_count_o = register_o[11:0];
@@ -198,16 +202,17 @@ interface IBcfg2 #(
   modport write_ext (input register_i, we_i);
   modport reg_ctrl (input clk_i, rst_i);
 
-  d_ff_rst #(
-             .Width(16)
-           ) bcfg2_ff (
-             .clk_i,
-             .rst_i,
-             .en_i(we_i),
-             .rst_val_i(ResetValue),
-             .data_i(register_i),
-             .data_o(register_o)
-           );
+  always_ff @(posedge clk_i or posedge rst_i)
+  begin
+    if (rst_i)
+    begin
+      register_o <= ResetValue;
+    end
+    else if (we_i)
+    begin
+      register_o <= register_i;
+    end
+  end
 
   assign shift_high_o = register_o[15:14];
   assign matrix_size_o = register_o[13:0];
@@ -234,16 +239,18 @@ interface IBcfg3 #(
   modport reg_ctrl (input clk_i, rst_i);
 
   assign register_o[13:0] = ResetValue[13:0];
-  d_ff_rst #(
-             .Width(2)
-           ) bcfg3_ff (
-             .clk_i,
-             .rst_i,
-             .en_i(we_i),
-             .rst_val_i(ResetValue[15:14]),
-             .data_i(register_i[15:14]),
-             .data_o(register_o[15:14])
-           );
+
+  always_ff @(posedge clk_i or posedge rst_i)
+  begin
+    if (rst_i)
+    begin
+      register_o[15:14] <= ResetValue[15:14];
+    end
+    else if (we_i)
+    begin
+      register_o[15:14] <= register_i[15:14];
+    end
+  end
 
   assign load_from_o = register_o[15:14];
 endinterface
@@ -264,33 +271,32 @@ interface ICprm1 #(
   logic [2:0] padding_o;
   logic padding_fill_o;
   logic [5:0] stride_o;
-  logic [1:0] activation_function_o;
-  logic activation_fn_enable_o;
+  logic [2:0] activation_function_o;
   logic accumulate_o;
   logic save_to_ram_o;
   logic save_to_buffer_o;
 
-  modport read (output padding_o, padding_fill_o, stride_o, activation_function_o, activation_fn_enable_o, accumulate_o, save_to_ram_o, save_to_buffer_o);
+  modport read (output padding_o, padding_fill_o, stride_o, activation_function_o, accumulate_o, save_to_ram_o, save_to_buffer_o);
   modport read_full (output register_o);
   modport write_ext (input register_o, we_i);
   modport reg_ctrl (input clk_i, rst_i);
 
-  d_ff_rst #(
-             .Width(16)
-           ) cprm1_ff (
-             .clk_i,
-             .rst_i,
-             .en_i(we_i),
-             .rst_val_i(ResetValue),
-             .data_i(register_i),
-             .data_o(register_o)
-           );
+  always_ff @(posedge clk_i or posedge rst_i)
+  begin
+    if (rst_i)
+    begin
+      register_o <= ResetValue;
+    end
+    else if (we_i)
+    begin
+      register_o <= register_i;
+    end
+  end
 
   assign padding_o = register_o[15:13];
   assign padding_fill_o = register_o[12];
   assign stride_o = register_o[11:6];
-  assign activation_function_o = register_o[5:4];
-  assign activation_fn_enable_o = register_o[3];
+  assign activation_function_o = register_o[5:3];
   assign accumulate_o = register_o[2];
   assign save_to_ram_o = register_o[1];
   assign save_to_buffer_o = register_o[0];
@@ -343,50 +349,55 @@ interface IStats #(
   modport reg_ctrl (input clk_i, rst_i);
 
   assign register_o[5] = ResetValue[5];
-  d_ff_rst #(
-             .Width(9)
-           ) bcfg1_ff (
-             .clk_i,
-             .rst_i,
-             .en_i(we_i),
-             .rst_val_i({ResetValue[15], ResetValue[14], ResetValue[11], ResetValue[10], ResetValue[4:0]}),
-             .data_i({conv_done_i, conv_running_i, dense_done_i, dense_running_i, error_code_i}),
-             .data_o({conv_done_o, conv_running_o, dense_done_o, dense_running_o, error_code_o})
-           );
 
-  d_ff_rst #(
-             .Width(3)
-           ) stats_int2_ff (
-             .clk_i,
-             .rst_i,
-             .en_i(we_int2_i),
-             .rst_val_i({ResetValue[12], ResetValue[8], ResetValue[7]}),
-             .data_i({conv_intrr_ac_i, dense_intrr_ac_i, error_intrr_ac_i}),
-             .data_o({conv_intrr_ac_o, dense_intrr_ac_o, error_intrr_ac_o})
-           );
+  always_ff @(posedge clk_i or posedge rst_i)
+  begin
+    if (rst_i)
+    begin
+      {conv_done_o, conv_running_o, dense_done_o, dense_running_o, error_code_o} <= {ResetValue[15], ResetValue[14], ResetValue[11], ResetValue[10], ResetValue[4:0]};
+    end
+    else if (we_int_i)
+    begin
+      {conv_done_o, conv_running_o, dense_done_o, dense_running_o, error_code_o} <= {conv_done_i, conv_running_i, dense_done_i, dense_running_i, error_code_i};
+    end
+  end
 
-  d_ff_rst #(
-             .Width(3)
-           ) stats_ff (
-             .clk_i,
-             .rst_i,
-             .en_i(we_i),
-             .rst_val_i({ResetValue[13], ResetValue[9], ResetValue[6]}),
-             .data_i({register_i[13], register_i[9], register_i[6]}),
-             .data_o({conv_intrr_en_o, dense_intrr_en_o, error_intrr_en_o})
-           );
 
-  assign conv_done_o = register_o[15];
-  assign conv_running_o = register_o[14];
-  assign conv_intrr_en_o = register_o[13];
-  assign conv_intrr_ac_o = register_o[12];
-  assign dense_done_o = register_o[11];
-  assign dense_running_o = register_o[10];
-  assign dense_intrr_en_o = register_o[9];
-  assign dense_intrr_ac_o = register_o[8];
-  assign error_intrr_ac_o = register_o[7];
-  assign error_intrr_en_o = register_o[6];
-  assign error_code_o = register_o[4:0];
+  always_ff @(posedge clk_i or posedge rst_i)
+  begin
+    if (rst_i)
+    begin
+      {conv_intrr_ac_o, dense_intrr_ac_o, error_intrr_ac_o} <= {ResetValue[12], ResetValue[8], ResetValue[7]};
+    end
+    else if (we_int2_i)
+    begin
+      {conv_intrr_ac_o, dense_intrr_ac_o, error_intrr_ac_o} <= {conv_intrr_ac_i, dense_intrr_ac_i, error_intrr_ac_i};
+    end
+  end
+
+  always_ff @(posedge clk_i or posedge rst_i)
+  begin
+    if (rst_i)
+    begin
+      {conv_intrr_en_o, dense_intrr_en_o, error_intrr_en_o} <= {ResetValue[13], ResetValue[9], ResetValue[6]};
+    end
+    else if (we_i)
+    begin
+      {conv_intrr_en_o, dense_intrr_en_o, error_intrr_en_o} <= {register_i[13], register_i[9], register_i[6]};
+    end
+  end
+
+  assign register_o[15] = conv_done_o;
+  assign register_o[14] = conv_running_o;
+  assign register_o[13] = conv_intrr_en_o;
+  assign register_o[12] = conv_intrr_ac_o;
+  assign register_o[11] = dense_done_o;
+  assign register_o[10] = dense_running_o;
+  assign register_o[9] = dense_intrr_en_o;
+  assign register_o[8] = dense_intrr_ac_o;
+  assign register_o[7] = error_intrr_ac_o;
+  assign register_o[6] = error_intrr_en_o;
+  assign register_o[4:0] = error_code_o;
 endinterface
 
 

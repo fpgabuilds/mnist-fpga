@@ -25,7 +25,7 @@ module dense_layer #(
 
       mac_shifter #(
                     .N(N)
-                  )(
+                  ) dense_mac_inst (
                     .clk_i,
                     .rst_i,
                     .en_i,
@@ -39,7 +39,7 @@ module dense_layer #(
 
       increment_then_stop #(
                             .Bits(6) // Number of bits in the counter, this can be found using $clog2(N+1) where N is the maximum value of the counter
-                          ) (
+                          ) dense_shift_counter_inst (
                             .clk_i, // Clock input
                             .run_i(shifted), // Run signal, when high the counter will increment, when low the counter will not change but will hold the current value
                             .rst_i, // Reset signal, when low the counter will be reset to the start value. Not tied to the clock

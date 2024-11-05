@@ -1,41 +1,27 @@
 module tb_aether_engine_example ();
-  // First 4 bits
-  localparam INST_NOP = 4'd0; // No Operation
-  localparam INST_RST = 4'd1; // Reset
-  localparam INST_RDR = 4'd2; // Read Register
-  localparam INST_WRR = 4'd3; // Write Register
-  localparam INST_LDW = 4'd4; // Load Weights
-  localparam INST_CNV = 4'd5; // Run Convolution
-  localparam INST_DNS = 4'd6; // Run Dense Layer
-
-  // Instruction reset
-  localparam RST_FULL = 4'd0;
-  localparam RST_CWGT = 4'd1;
-  localparam RST_CONV = 4'd2;
-  localparam RST_DWGT = 4'd3;
-  localparam RST_DENS = 4'd4;
-
-  // Instruction Load weights
-  localparam LDW_CWGT = 4'd1; // Load Convolution Weights
-  localparam LDW_DWGT = 4'd2; // Load Dense Weights
-
+`include "../aether_constants.sv";
 
   logic clk;
+  logic clk_data;
   logic [23:0] cmd;
   logic [15:0] data_output;
+  logic interrupt;
 
   aether_engine #(
                   .DataWidth(8),
                   .MaxMatrixSize(5),
-                  .KernelSize(3),
                   .ConvEngineCount(2),
+                  .DenseEngineCount(5),
                   .ClkRate(143_000_000)
                 ) accelerator_inst (
                   .clk_i(clk),
-                  .clk_data_i(), // *(This is a stretch goal)*
-                  .cmd_i(cmd),
+                  .clk_data_i(clk_data),
+                  .instruction_i(cmd[23:20]),
+                  .param_1_i(cmd[19:16]),
+                  .param_2_i(cmd[15:0]),
                   .data_o(data_output),
-                  .buffer_full_o(),
+                  .interrupt_o(),
+
                   .sdram_clk_en_o(),
                   .sdram_bank_activate_o(),
                   .sdram_address_o(),
@@ -49,6 +35,7 @@ module tb_aether_engine_example ();
 
   // Clock generation
   always #5 clk = ~clk;
+  always #10 clk_data = ~clk_data; // 1/2 the speed of the main clock, should make a different frequency later to test
 
   // Define a task to execute a command on the positive edge of the clock
   task execute_cmd(input [23:0] command);
@@ -56,30 +43,62 @@ module tb_aether_engine_example ();
     cmd = command;
   endtask
 
-  logic [23:0] commands[] = '{
-          {INST_RST, RST_FULL, 16'b0},
-          {INST_WRR, 4'h3, 16'd2},
-          // TODO: implement something so I can do this {START_TASK, WRITE_TO_MEM, 16'd0},
-          {INST_LDW, LDW_CWGT, 16'd8},
-          {INST_CNV, 4'b1111, 16'd16}, //TODO: memory address correclty after loading data
-          {INST_CNV, 4'b0011, 16'd24}, // (This is continuing the previous task)
-          {INST_LDW, LDW_CWGT, 16'd1024},
-          {INST_RST, RST_CONV, 16'b0}, // This is needed to clear the accumulator, it takes 1 cycle and should not be much of a problem, maybe load kernel does it?
-          {INST_CNV, 4'b1111, 16'd16},
-          {INST_CNV, 4'b0011, 16'd24}
-        };
-
   initial
   begin
     clk = 1'b0;
     cmd = 24'b0;
 
-    // Execute all commands in the array
-    foreach (commands[i])
-    begin
-      begin
-        execute_cmd(commands[i]);
-      end
-    end
+    execute_cmd({RST, RST_FULL, 16'b0});
+
+    // Load Weights
+    //execute_cmd({WRR, REG_MSTRT, 16'd0});
+    //execute_cmd({WRR, REG_MENDD, 16'd0});
+    execute_cmd({LDW, LDW_CWGT, 16'hXXXX}); // Make this similar to the load input data with a start and cont
+    //...
+    execute_cmd({LDW, LDW_CWGT, 16'hXXXX}); // Actually moves from memory to the hardware
+
+    //execute_cmd({WRR, REG_MSTRT, 16'd0});
+    //execute_cmd({WRR, REG_MENDD, 16'd0});
+    execute_cmd({WRR, REG_BCFG1, 16'h4002});
+    execute_cmd({WRR, REG_BCFG2, 16'h0004});
+    //execute_cmd({WRR, REG_BCFG3, 16'd0});
+    execute_cmd({WRR, REG_CPRM1, 16'h0040});
+
+    execute_cmd({LIP, LIP_STRT, 16'hXXXX});
+    execute_cmd({LIP, LIP_CONT, 16'hXXXX}); //Repeat for all image data
+    // ...
+
+    execute_cmd({CNV, 20'h00000}); // Start Conv, Don't save to ram  //First Conv
+    execute_cmd({NOP, 20'h00000});
+
+    @(posedge interrupt); //wait till its finished (it would be nice if we did not have to wait for the memory load task)
+    execute_cmd({RDR, REG_STATS, 16'h0000}); // clear interrupts and can be used to see status
+    execute_cmd({LDW, LDW_CWGT, 16'hXXXX}); // Actually moves from memory to the hardware
+    execute_cmd({NOP, 20'h00000});
+    @(posedge interrupt); //wait till its finished loading mem
+    execute_cmd({RDR, REG_STATS, 16'h0000}); // clear interrupts and can be used to see status
+    execute_cmd({WRR, REG_CPRM1, 16'h0044}); //Accumulate
+    execute_cmd({CNV, 20'h00000}); // Start Conv, Don't save to ram  //Second Conv
+    execute_cmd({NOP, 20'h00000});
+
+    @(posedge interrupt); //wait till its finished (it would be nice if we did not have to wait for the memory load task)
+    execute_cmd({RDR, REG_STATS, 16'h0000}); // clear interrupts and can be used to see status
+    execute_cmd({LDW, LDW_CWGT, 16'hXXXX}); // Actually moves from memory to the hardware
+    execute_cmd({NOP, 20'h00000});
+    @(posedge interrupt); //wait till its finished loading mem
+    execute_cmd({RDR, REG_STATS, 16'h0000}); // clear interrupts and can be used to see status
+
+    execute_cmd({WRR, REG_CPRM1, 16'h0045}); //Accumulate and save to buffer
+    execute_cmd({CNV, 20'hXXXX}); // Start Conv, Don't save to ram  //final
+    execute_cmd({NOP, 20'h00000});
+    @(posedge interrupt);
+    execute_cmd({RDR, REG_STATS, 16'h0000}); // clear interrupts and can be used to see status
+
+    execute_cmd({ROP, ROP_STRT, 16'h0000});
+    execute_cmd({ROP, ROP_CONT, 16'h0000});
+    //...
+
+    $stop;
+
   end
 endmodule

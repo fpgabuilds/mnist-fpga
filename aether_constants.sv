@@ -29,6 +29,8 @@ localparam [3:0] RST_REGS = 4'h5;
 // LDW Parameters
 localparam [3:0] LDW_CWGT = 4'h1;
 localparam [3:0] LDW_DWGT = 4'h2;
+localparam [3:0] LDW_STRT = 4'h3;
+localparam [3:0] LDW_CONT = 4'h4;
 
 // LIP Parameters
 localparam [3:0] LIP_STRT = 4'h1;
