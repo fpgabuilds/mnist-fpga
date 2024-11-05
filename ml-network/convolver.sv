@@ -2,7 +2,7 @@
 // and then heavily modified to fit the requirements of the project
 // TODO: add matrix_size_i to the shift registers in the mac so matrix size can change
 module convolver #(
-    parameter MaxMatrixSize = 3, // maximum matrix size that this convolver can convolve
+    parameter [13:0] MaxMatrixSize = 3, // maximum matrix size that this convolver can convolve
     parameter KernelSize = 3, // kernel size
     parameter N = 16 // total bit width
   )(
@@ -16,24 +16,29 @@ module convolver #(
 
     output logic signed [2*N-1:0] conv_o, // convolution output
     output logic valid_conv_o, // valid convolution output
-    output logic end_conv_o // end of convolution
+    output logic end_conv_o, // end of convolution
+
+    input logic assert_on_i // enable assertions
   );
   always @(posedge clk_i)
   begin
-    assert (KernelSize > 1) else
-             $error("KernelSize must be greater than 1");
-    assert (MaxMatrixSize > 1) else
-             $error("MaxMatrixSize must be greater than 1");
-    assert (N > 0) else
-             $error("N must be greater than 0");
-    assert (MaxMatrixSize >= KernelSize) else
-             $error("MaxMatrixSize must be greater than or equal to KernelSize");
-    assert (stride_i < MaxMatrixSize) else
-             $error("Stride must be less than MaxMatrixSize, stride = %0d, MaxMatrixSize = %0d", stride_i, MaxMatrixSize);
-    assert (matrix_size_i <= MaxMatrixSize) else
-             $error("matrix_size_i must be less than or equal to MaxMatrixSize");
-    assert (matrix_size_i > 1) else
-             $error("matrix_size_i must be greater than 1");
+    if (assert_on_i)
+    begin
+      assert (KernelSize > 1) else
+               $error("KernelSize must be greater than 1");
+      assert (MaxMatrixSize > 1) else
+               $error("MaxMatrixSize must be greater than 1");
+      assert (N > 0) else
+               $error("N must be greater than 0");
+      assert (MaxMatrixSize >= KernelSize) else
+               $error("MaxMatrixSize must be greater than or equal to KernelSize");
+      assert (stride_i < MaxMatrixSize) else
+               $error("Stride must be less than MaxMatrixSize, stride = %0d, MaxMatrixSize = %0d", stride_i, MaxMatrixSize);
+      assert (matrix_size_i <= MaxMatrixSize) else
+               $error("matrix_size_i must be less than or equal to MaxMatrixSize");
+      assert (matrix_size_i > 1) else
+               $error("matrix_size_i must be greater than 1");
+    end
   end
 
   logic [2*N-1:0] conv_vals [KernelSize*KernelSize-2:0];
@@ -81,17 +86,20 @@ module convolver #(
                 .mac_o(end_row_data)
               );
 
-          shift_reg #(
-                      .N(2*N), // Width of the data
-                      .Length(MaxMatrixSize-KernelSize) // Number of registers
-                    ) row_shift (
-                      .clk_i(clk_i), // clock
-                      .en_i(en_i), // enable shift
-                      .rst_i(rst_i), //reset
-                      .rst_val_i({2*N{1'b0}}), //reset value (Every register will be initialized with this value)
-                      .data_i(end_row_data), //data in
-                      .data_o(conv_vals[i]) //data out
-                    );
+          logic [2*N-1:0] store [MaxMatrixSize-KernelSize-1:0];
+          shift_reg_with_store #(
+                                 .N(2*N),
+                                 .Length(MaxMatrixSize-KernelSize)
+                               ) row_shift (
+                                 .clk_i(clk_i),
+                                 .en_i(en_i),
+                                 .rst_i(rst_i),
+                                 .rst_val_i({2*N{1'b0}}),
+                                 .data_i(end_row_data),
+                                 .data_o(),
+                                 .store_o(store)
+                               );
+          assign conv_vals[i] = store[matrix_size_i-KernelSize-1];
         end
       end
       else
@@ -105,6 +113,7 @@ module convolver #(
               .add_i(conv_vals[i-1]),
               .mac_o(conv_vals[i])
             );
+        // TODO: Implement mac shifter instead of mac
       end
     end
   endgenerate

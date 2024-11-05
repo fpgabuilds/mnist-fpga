@@ -2,9 +2,9 @@
 // TODO: add shifting to the sum
 // TODO: add activation functions on results
 module convolution_layer #(
-    parameter MaxMatrixSize = 16383, // maximum matrix size that this convolver can convolve
+    parameter [13:0] MaxMatrixSize = 16383, // maximum matrix size that this convolver can convolve
     parameter KernelSize = 3, // kernel size
-    parameter EngineCount = 1024, // Amount of instantiated convolvers
+    parameter [9:0] EngineCount = 1023, // Amount of instantiated convolvers
     parameter N = 16 // total bit width
   ) (
     input logic clk_i, // clock
@@ -12,42 +12,38 @@ module convolution_layer #(
     input logic run_i, // run the convolution
 
     // Configuration Registers
-    IConvConfig1.read config_1_i,
-    IConvConfig2.read config_2_i,
-    IConvConfig3.read config_3_i,
-    IConvConfig4.read config_4_i,
+    IBcfg1.read reg_bcfg1_i,
+    IBcfg2.read reg_bcfg2_i,
+    // IBcfg3.read reg_bcfg3,
+    ICprm1.read reg_cprm1_i,
 
     // Data Inputs
     input wire signed [N-1:0] kernel_weights_i [EngineCount-1:0][KernelSize*KernelSize-1:0], // kernel weights
     input logic signed [N-1:0] activation_data_i, // activation data
 
-    // Output Registers
-    IConvStatus.write status_o, // convolution results [1[Done], 1[Running], 14[Convolution Count]]
-
     // Data Outputs
     output logic signed [N-1:0] data_o [EngineCount-1:0], // convolution data output
-    output logic conv_valid_o // convolution valid
+    output logic conv_valid_o, // convolution valid
+    output logic conv_done_o, // convolution done
+
+    input logic assert_on_i // enable assertions
   );
+  logic [5:0] shift_amount;
+  assign shift_amount = {reg_bcfg2_i.shift_high_o, reg_bcfg1_i.shift_low_o};
 
   always @ (posedge clk_i)
   begin
-    assert(MaxMatrixSize <= 16383) else
-            $error("MaxMatrixSize must be less than or equal to 16383"); // By specification
-    assert(MaxMatrixSize > 0) else
-            $error("MaxMatrixSize must be greater than 0");
-    assert(EngineCount <= 1024) else
-            $error("EngineCount must be less than or equal to 1024"); // By specification
-    assert(EngineCount > 0) else
-            $error("EngineCount must be greater than 0");
-
-    assert(config_1_i.engine_count <= EngineCount) else
-            $error("Requested EngineCount is greater than the instantiated EngineCount");
-    assert(config_1_i.engine_count > 0) else
-            $error("Requested EngineCount must be greater than 0");
-    assert(config_2_i.matrix_size + 2 * config_3_i.padding <= MaxMatrixSize) else
-            $error("Requested MatrixSize + padding is greater than the instantiated MaxMatrixSize");
-    assert(config_3_i.shift_amount < 2 * N) else
-            $error("Shift amount is greater than the total bit width * 2");
+    if (assert_on_i)
+    begin
+      assert(reg_bcfg1.engine_count_o <= EngineCount) else
+              $error("Requested EngineCount is greater than the instantiated EngineCount");
+      assert(reg_bcfg1.engine_count_o > 0) else
+              $error("Requested EngineCount must be greater than 0");
+      assert(reg_bcfg2_i.matrix_size_o + 2 * reg_cprm1_i.padding_o <= MaxMatrixSize) else
+              $error("Requested MatrixSize + padding is greater than the instantiated MaxMatrixSize");
+      assert(shift_amount < 2 * N) else // This is actually fine
+              $warning("Shift amount is greater than the total bit width * 2");
+    end
   end
 
 
@@ -90,18 +86,19 @@ module convolution_layer #(
                 ) conv_inst (
                   .clk_i,
                   .rst_i,
-                  .en_i((i < config_1_i.engine_count) ? run_i : 1'b0),
+                  .en_i((i < reg_bcfg1.engine_count_o) ? run_i : 1'b0),
                   .data_i(activation_data_i),
-                  .stride_i(config_1_i.stride),
-                  .matrix_size_i(config_2_i.matrix_size),
+                  .stride_i(reg_cprm1_i.stride_o),
+                  .matrix_size_i(reg_bcfg2_i.matrix_size_o),
                   .weights_i(kernel_weights_i[i]),
                   .conv_o(conv_result),
                   .valid_conv_o(valid),
-                  .end_conv_o(done)
+                  .end_conv_o(done),
+                  .assert_on_i(assert_on_i)
                 );
 
-      assign sum_accum = (config_2_i.accumulate) ? conv_result + prev_result : conv_result;
-      assign sum = sum_accum >>> config_3_i.shift_amount;
+      assign sum_accum = (reg_cprm1_i.accumulate_o) ? conv_result + prev_result : conv_result;
+      assign sum = sum_accum >>> shift_amount;
 
       dual_port_bram #(
                        .DataWidth(2*N),
@@ -124,28 +121,15 @@ module convolution_layer #(
       if (i == 0)
         assign conv_valid = valid;
 
-      assign conv_done[i] = (i < config_1_i.engine_count) ? done : 1'b1;
-      assign data_o[i] = (i < config_1_i.engine_count && config_2_i.save_to_ram && valid) ? sum[N-1:0] : {N{1'b0}};
+      assign conv_done[i] = (i < reg_bcfg1.engine_count_o) ? done : 1'b1;
+      assign data_o[i] = (i < reg_bcfg1.engine_count_o && (reg_cprm1_i.save_to_ram_o || reg_cprm1_i.save_to_buffer_o) && valid) ? sum[N-1:0] : {N{1'b0}};
     end
   endgenerate
 
-  logic done;
 
-  assign done = (conv_done == {EngineCount{1'b1}});
-  assign status_o.done = done;
-  assign status_o.running = run_i && !done;
-  assign conv_valid_o = (config_2_i.save_to_ram) ? conv_valid : 1'b0;
-
-  generate
-    if (ConvOutputSize <= 14)
-    begin : gen_count_pad
-      assign status_o.count = {{(14-ConvOutputSize){1'b0}}, conv_counter};  // Zero pad upper bits
-    end
-    else
-    begin : gen_count_truncate
-      assign status_o.count = conv_counter[13:0];  // Take lower 14 bits
-    end
-  endgenerate
+  assign conv_done_o = (conv_done == {EngineCount{1'b1}});
+  //assign status_o.running = run_i && !done;
+  assign conv_valid_o = (reg_cprm1_i.save_to_ram_o || reg_cprm1_i.save_to_buffer_o) ? conv_valid : 1'b0;
 endmodule
 
 
@@ -154,26 +138,30 @@ module tb_convolution_layer ();
   parameter Bits = 8;
   parameter EngineCount = 2;
   parameter KernelSize = 3;
+  parameter MaxMatrixSize = 10;
   parameter MatrixSize = 5;
 
   logic clk;
   logic en;
   logic rst;
 
-  IConvConfig1 conv_config_1();
-  IConvConfig2 conv_config_2();
-  IConvConfig3 conv_config_3();
-  IConvConfig4 conv_config_4();
-  IConvStatus conv_status();
+  IBcfg1 #(.ResetValue(16'h0001)) reg_bcfg1();
+  IBcfg2 #(.ResetValue(16'h0000)) reg_bcfg2();
+  ICprm1 #(.ResetValue(16'h0040)) reg_cprm1();
+
 
   logic signed  [Bits-1:0] kernel_weights [EngineCount-1:0][KernelSize*KernelSize-1:0];
   logic signed  [Bits-1:0] activation_data;
 
   logic signed  [Bits-1:0] data_o [EngineCount-1:0];
   logic conv_valid;
+  logic conv_done;
+
+  logic reg_reset;
+  logic assert_on;
 
   convolution_layer #(
-                      .MaxMatrixSize(MatrixSize), // maximum matrix size that this convolver can convolve
+                      .MaxMatrixSize(MaxMatrixSize), // maximum matrix size that this convolver can convolve
                       .KernelSize(KernelSize), // kernel size
                       .EngineCount(EngineCount), // Amount of instantiated convolvers
                       .N(Bits) // total bit width
@@ -183,28 +171,24 @@ module tb_convolution_layer ();
                       .run_i(en), // run the convolution
 
                       // Configuration Registers
-                      .config_1_i(conv_config_1.read),
-                      .config_2_i(conv_config_2.read),
-                      .config_3_i(conv_config_3.read),
-                      .config_4_i(conv_config_4.read),
+                      .reg_bcfg1_i(reg_bcfg1.read),
+                      .reg_bcfg2_i(reg_bcfg2.read),
+                      .reg_cprm1_i(reg_cprm1.read),
 
                       // Data Inputs
                       .kernel_weights_i(kernel_weights), // kernel weights
                       .activation_data_i(activation_data), // activation data
 
-                      // Output Registers
-                      .status_o(conv_status.write), // convolution results [1[Done], 1[Running], 14[Convolution Count]]
-
                       // Data Outputs
                       .data_o, // convolution data output
-                      .conv_valid_o(conv_valid) // convolution valid
+                      .conv_valid_o(conv_valid), // convolution valid
+                      .conv_done_o(conv_done), // convolution done
+
+                      .assert_on_i(assert_on)
                     );
 
   // Clock generation
   always #5 clk = ~clk;
-
-  assign conv_config_1.full_register = 16'h0402; // Stride = 1, EngineCount = 2
-  assign conv_config_4.full_register = 16'h0000; // ActivationFunction = 0
 
   assign kernel_weights[0][0] = 8'h01;  // top left
   assign kernel_weights[0][1] = 8'h02;  // top middle
@@ -226,6 +210,14 @@ module tb_convolution_layer ();
   assign kernel_weights[1][7] = 8'hD8;   // -40
   assign kernel_weights[1][8] = 8'h32;   // 50
 
+  assign reg_bcfg1.clk_i = clk;
+  assign reg_bcfg1.rst_i = reg_reset;
+
+  assign reg_bcfg2.clk_i = clk;
+  assign reg_bcfg2.rst_i = reg_reset;
+
+  assign reg_cprm1.clk_i = clk;
+  assign reg_cprm1.rst_i = reg_reset;
 
 
   initial
@@ -233,11 +225,24 @@ module tb_convolution_layer ();
     clk = 1'b0;
     rst = 1'b1;
     en = 1'b0;
+    reg_reset = 1'b1;
     activation_data = 8'b0;
-    conv_config_2.full_register = 16'h0005; // Accumulate = 0, SaveToRam = 0, MatrixSize = 5
-    conv_config_3.full_register = 16'h0000; // Padding = 0, PaddingFill = 0, ShiftAmount = 0
+    assert_on = 1'b0;
+    @(posedge clk);
+    reg_reset = 1'b0;
+    @(posedge clk);
+    reg_bcfg1.register_i = 16'h0002; // Shift = 0, EngineCount = 2
+    reg_bcfg1.we_i = 1'b1;
+    reg_bcfg2.register_i = 16'h0005; // MatrixSize = 5
+    reg_bcfg2.we_i = 1'b1;
+    reg_cprm1.register_i = 16'b0000_0000_0100_0000; // Stride = 1
+    reg_cprm1.we_i = 1'b1;
 
     @(posedge clk);
+    reg_bcfg1.we_i = 1'b0;
+    reg_bcfg2.we_i = 1'b0;
+    reg_cprm1.we_i = 1'b0;
+    assert_on = 1'b1;
     @(posedge clk);
 
     rst = 1'b0;
@@ -249,12 +254,13 @@ module tb_convolution_layer ();
       @(posedge clk);
     end
 
-    @(posedge conv_status.done);
+    @(posedge conv_done);
     @(posedge clk);
-    conv_config_2.full_register = 16'hC005; // Accumulate = 1, SaveToRam = 1, MatrixSize = 5
-    conv_config_3.full_register = 16'h0009; // Padding = 0, PaddingFill = 0, ShiftAmount = 9
+    reg_cprm1.register_i = 16'b0000_0000_0100_0101; // Stride = 1
+    reg_cprm1.we_i = 1'b1;
     rst = 1'b1;
     @(posedge clk);
+    reg_cprm1.we_i = 1'b0;
     rst = 1'b0;
 
     for (int i = 0; i < MatrixSize*MatrixSize; i = i + 1)
@@ -263,10 +269,10 @@ module tb_convolution_layer ();
       @(posedge clk);
     end
 
-    @(posedge conv_status.done);
+    @(posedge conv_done);
     @(posedge clk);
 
-    $finish;
+    $stop;
   end
 
   always @(posedge clk)

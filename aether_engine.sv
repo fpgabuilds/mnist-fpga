@@ -33,7 +33,10 @@ module aether_engine #(
     output logic sdram_column_addr_strobe_o,
     output logic sdram_we_o,
     output logic [1:0] sdram_dqm_o,
-    inout wire [15:0] sdram_dq_io
+    inout wire [15:0] sdram_dq_io,
+
+    //Debugging
+    input logic assert_on_i
   );
 
 `include "aether_constants.sv";
@@ -65,6 +68,7 @@ module aether_engine #(
 
   logic signed [DataWidth-1:0] conv_data [ConvEngineCount-1:0];
   logic conv_valid;
+  logic conv_done;
 
   // Dense Signals
   logic run_dense;
@@ -294,21 +298,20 @@ module aether_engine #(
                       .run_i(!conv_no_data), // run the convolution
 
                       // Configuration Registers
-                      .config_1_i(conv_config_1),
-                      .config_2_i(conv_config_2),
-                      .config_3_i(conv_config_3),
-                      .config_4_i(conv_config_4),
+                      .reg_bcfg1_i(reg_bcfg1.read),
+                      .reg_bcfg2_i(reg_bcfg2.read),
+                      .reg_cprm1_i(reg_cprm1.read),
 
                       // Data Inputs
                       .kernel_weights_i(conv_kernel_weights), // kernel weights
                       .activation_data_i(conv_activation_data), // activation data
 
-                      // Output Registers
-                      .status_o(conv_status), // convolution results [1[Done], 1[Running], 14[Convolution Count]]
-
                       // Data Outputs
                       .data_o(conv_data), // convolution data output
-                      .conv_valid_o(conv_valid) // convolution valid
+                      .conv_valid_o(conv_valid), // convolution valid
+                      .conv_done_o(conv_done), // convolution done
+
+                      .assert_on_i(assert_on_i)
                     );
 
   ///--------------------------------------------------------------------------------------------
