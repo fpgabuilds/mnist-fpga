@@ -232,27 +232,29 @@ interface IBcfg3 #(
   logic [15:0] register_o;
 
   logic [15:14] load_from_o;
+  logic [13:8] shift_final_o;
 
-  modport read (output load_from_o);
+  modport read (output load_from_o, shift_final_o);
   modport read_full (output register_o);
   modport write_ext (input register_i, we_i);
   modport reg_ctrl (input clk_i, rst_i);
 
-  assign register_o[13:0] = ResetValue[13:0];
+  assign register_o[7:0] = ResetValue[7:0];
 
   always_ff @(posedge clk_i or posedge rst_i)
   begin
     if (rst_i)
     begin
-      register_o[15:14] <= ResetValue[15:14];
+      register_o[15:8] <= ResetValue[15:8];
     end
     else if (we_i)
     begin
-      register_o[15:14] <= register_i[15:14];
+      register_o[15:8] <= register_i[15:8];
     end
   end
 
   assign load_from_o = register_o[15:14];
+  assign shift_final_o = register_o[13:8];
 endinterface
 
 // Register: 0x8

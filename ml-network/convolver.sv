@@ -1,6 +1,5 @@
 // Inspiration taken from https://thedatabus.in/convolver
 // and then heavily modified to fit the requirements of the project
-// TODO: add matrix_size_i to the shift registers in the mac so matrix size can change
 module convolver #(
     parameter [13:0] MaxMatrixSize = 3, // maximum matrix size that this convolver can convolve
     parameter KernelSize = 3, // kernel size
@@ -26,18 +25,14 @@ module convolver #(
     begin
       assert (KernelSize > 1) else
                $error("KernelSize must be greater than 1");
-      assert (MaxMatrixSize > 1) else
-               $error("MaxMatrixSize must be greater than 1");
       assert (N > 0) else
                $error("N must be greater than 0");
-      assert (MaxMatrixSize >= KernelSize) else
-               $error("MaxMatrixSize must be greater than or equal to KernelSize");
-      assert (stride_i < MaxMatrixSize) else
-               $error("Stride must be less than MaxMatrixSize, stride = %0d, MaxMatrixSize = %0d", stride_i, MaxMatrixSize);
+      assert (matrix_size_i >= KernelSize) else
+               $error("matrix_size_i must be greater than or equal to KernelSize");
+      assert (stride_i < matrix_size_i) else
+               $error("Stride must be less than matrix_size_i, stride = %0d, matrix_size_i = %0d", stride_i, matrix_size_i);
       assert (matrix_size_i <= MaxMatrixSize) else
                $error("matrix_size_i must be less than or equal to MaxMatrixSize");
-      assert (matrix_size_i > 1) else
-               $error("matrix_size_i must be greater than 1");
     end
   end
 
@@ -50,9 +45,9 @@ module convolver #(
       if(i == 0) // first MAC unit
       begin
         mac #(.N(N)) mac_start (
-              .clk_i(clk_i),
-              .rst_i(rst_i),
-              .en_i(en_i),
+              .clk_i,
+              .rst_i,
+              .en_i,
               .value_i(data_i),
               .mult_i(weights_i[i]),
               .add_i({2*N{1'b0}}),
@@ -64,9 +59,9 @@ module convolver #(
         if((i+1) == KernelSize*KernelSize) // end of convolver
         begin
           mac #(.N(N)) mac_final (
-                .clk_i(clk_i),
-                .rst_i(rst_i),
-                .en_i(en_i),
+                .clk_i,
+                .rst_i,
+                .en_i,
                 .value_i(data_i),
                 .mult_i(weights_i[i]),
                 .add_i(conv_vals[i-1]),
@@ -77,9 +72,9 @@ module convolver #(
         begin
           logic signed [2*N-1:0] end_row_data;
           mac #(.N(N)) mac_end_row (
-                .clk_i(clk_i),
-                .rst_i(rst_i),
-                .en_i(en_i),
+                .clk_i,
+                .rst_i,
+                .en_i,
                 .value_i(data_i),
                 .mult_i(weights_i[i]),
                 .add_i(conv_vals[i-1]),
@@ -91,9 +86,9 @@ module convolver #(
                                  .N(2*N),
                                  .Length(MaxMatrixSize-KernelSize)
                                ) row_shift (
-                                 .clk_i(clk_i),
-                                 .en_i(en_i),
-                                 .rst_i(rst_i),
+                                 .clk_i,
+                                 .en_i,
+                                 .rst_i,
                                  .rst_val_i({2*N{1'b0}}),
                                  .data_i(end_row_data),
                                  .data_o(),
@@ -105,15 +100,14 @@ module convolver #(
       else
       begin
         mac #(.N(N)) mac_middle (
-              .clk_i(clk_i),
-              .rst_i(rst_i),
-              .en_i(en_i),
+              .clk_i,
+              .rst_i,
+              .en_i,
               .value_i(data_i),
               .mult_i(weights_i[i]),
               .add_i(conv_vals[i-1]),
               .mac_o(conv_vals[i])
             );
-        // TODO: Implement mac shifter instead of mac
       end
     end
   endgenerate
@@ -141,7 +135,7 @@ module convolver #(
                         .count_o(clk_count)        // of the convolution is signaled by the end_conv_o signal
                       );
 
-  assign min_cycles = clk_count > ((KernelSize-1)*MaxMatrixSize+KernelSize-1);
+  assign min_cycles = clk_count > ((KernelSize-1)*matrix_size_i+KernelSize-1);
   assign end_conv_o = (clk_count == max_clk_count) ? 1'b1 : 1'b0;
 
 
@@ -154,7 +148,7 @@ module convolver #(
   logic [InvConcCountSize-1:0] max_inv_count;
   logic [InvConcCountSize-1:0] inv_count;
 
-  assign max_conv_count = MaxMatrixSize-KernelSize;
+  assign max_conv_count = matrix_size_i-KernelSize;
   assign max_inv_count = KernelSize-2;
 
   counter #(
@@ -194,20 +188,16 @@ module convolver #(
 
   // Count the amount of output rows done in the convolution
   localparam RowCountSize = $clog2(MaxMatrixSize - KernelSize + 1);
-
-  logic [RowCountSize-1:0] max_row_count;
   logic [RowCountSize-1:0] row_count;
-
-  assign max_row_count = MaxMatrixSize - KernelSize;
 
   increment_then_stop #(
                         .Bits(RowCountSize)
                       ) row_counter ( // Counts total clock cycles used in this convolution
                         .clk_i(clk_i),
-                        .run_i(conv_count == MaxMatrixSize-KernelSize),
+                        .run_i(conv_count == matrix_size_i-KernelSize),
                         .rst_i(rst_i),
                         .start_val_i({RowCountSize{1'b0}}),
-                        .end_val_i(max_row_count), // it does not matter if the actual matrix is smaller
+                        .end_val_i({RowCountSize{1'b1}}),
                         .count_o(row_count)
                       );
 
@@ -217,7 +207,7 @@ module convolver #(
 
   assign a = ((conv_count + 1) % stride_i == 0) && (row_count % stride_i == 0);
   assign b = (inv_count == KernelSize-2)&&(row_count % stride_i == 0);
-  assign c = (clk_count == (KernelSize-1)*MaxMatrixSize+KernelSize-1);
+  assign c = (clk_count == (KernelSize-1)*matrix_size_i+KernelSize-1);
 
   assign stride_conv = (a || b || c);
   assign valid_conv_o = (min_cycles && row_conv && stride_conv && !end_conv_o);
@@ -228,7 +218,8 @@ endmodule
 
 // TODO: Test stride and verify that it does the optimal clock cycles
 module tb_convolver;
-  parameter MatrixSize = 8;  // Changed to 8 for the 8x8 activation map
+  parameter [13:0] MaxMatrixSize = 10;  // Changed to 8 for the 8x8 activation map
+  parameter [13:0] MatrixSize = 8;  // Changed to 8 for the 8x8 activation map
   parameter KernelSize = 3;  // Kept as 3 for the 3x3 kernel
   parameter N = 16;
 
@@ -237,10 +228,10 @@ module tb_convolver;
   reg en;
   reg rst;
   reg [N-1:0] activation;
-  logic [N-1:0] weights_3x3 [KernelSize*KernelSize-1:0];
+  logic signed [N-1:0] weights_3x3 [KernelSize*KernelSize-1:0];
 
   // Outputs
-  logic [2*N-1:0] conv_op;
+  logic signed [2*N-1:0] conv_op;
   logic end_conv;
   logic valid_conv;
   integer i;
@@ -249,11 +240,11 @@ module tb_convolver;
   integer output_counter;
 
   // Expected output values (replace with actual expected values)
-  logic [2*N-1:0] expected_outputs [36-1:0];  // 36 is the number of outputs for 8x8 input with 3x3 kernel
+  logic signed [2*N-1:0] expected_outputs [36-1:0];  // 36 is the number of outputs for 8x8 input with 3x3 kernel
 
   // Instantiate the Unit Under Test (UUT)
   convolver #(
-              .MatrixSize(MatrixSize),
+              .MaxMatrixSize(MaxMatrixSize),
               .KernelSize(KernelSize),
               .N(N)
             ) uut_3x3 (
@@ -266,7 +257,8 @@ module tb_convolver;
               .weights_i(weights_3x3),
               .conv_o(conv_op),
               .valid_conv_o(valid_conv),
-              .end_conv_o(end_conv)
+              .end_conv_o(end_conv),
+              .assert_on_i(1'b1)
             );
 
   always #5 clk = ~clk;
@@ -323,15 +315,13 @@ module tb_convolver;
     expected_outputs[34] = 32'd2058;
     expected_outputs[35] = 32'd2094;
 
-
-    // Wait 100 ns for global reset to finish
-    #10;
+    @(posedge clk);
     rst = 1;
-    #10;
+    @(posedge clk);
     rst = 0;
-    #10;
+    @(posedge clk);
     en = 1;
-    for(i = 0; i < 64; i = i + 1)  // 64 inputs for 8x8 matrix
+    for(i = 0; i < 67; i = i + 1)  // 64 inputs for 8x8 matrix and then a few more to finish the convolution
     begin
       activation = i;
       @(posedge clk);
@@ -343,191 +333,10 @@ module tb_convolver;
         output_counter = output_counter + 1;
       end
     end
-    $display("Test completed. Total outputs checked: %0d", output_counter);
-    $finish;
+    assert(output_counter == 36)
+          else
+            $error("Expected 36 outputs, got %0d", output_counter);
+    $display("Test completed successfully");
+    $stop;
   end
 endmodule
-
-
-// module tb_convolver;
-//   parameter MatrixSize = 4;  // Changed to 4 for the 4x4 activation map
-//   parameter KernelSize = 3;  // Changed to 3 for the 3x3 kernel
-//   parameter N = 16;
-
-//   // Inputs
-//   logic clk;
-//   logic rst;
-//   logic en;
-//   logic [N-1:0] data;
-//   logic [5:0] stride;
-
-//   // Outputs for 3x3 convolver
-//   logic [N-1:0] conv_3x3;
-//   logic valid_conv_3x3;
-//   logic end_conv_3x3;
-
-//   // Test vectors
-//   logic [N-1:0] input_matrix [MatrixSize*MatrixSize-1:0];
-//   logic [N-1:0] weights_3x3 [KernelSize*KernelSize-1:0];
-//   logic [N-1:0] expected_output [2*2-1:0];  // 2x2 output for 4x4 input with 3x3 kernel
-
-//   // Instantiate the 3x3 convolver
-//   convolver #(
-//               .MatrixSize(MatrixSize),
-//               .KernelSize(KernelSize),
-//               .N(N)
-//             ) uut_3x3 (
-//               .clk_i(clk),
-//               .rst_i(rst),
-//               .en_i(en),
-//               .data_i(data),
-//               .stride_i(stride),
-//               .weights_i(weights_3x3),
-//               .conv_o(conv_3x3),
-//               .valid_conv_o(valid_conv_3x3),
-//               .end_conv_o(end_conv_3x3)
-//             );
-
-//   // Clock generation
-//   always #5 clk = ~clk;
-
-//   initial
-//   begin
-//     // Initialize inputs
-//     clk = 1'b0;
-//     rst = 1'b1;
-//     en = 1'b0;
-//     data = {N{1'b0}};
-//     stride = 6'd1;
-
-//     // Initialize test vectors
-//     input_matrix = '{
-//                    16'd15,  16'd14,  16'd13,  16'd12,
-//                    16'd11,  16'd10,  16'd9,  16'd8,
-//                    16'd7,  16'd6,  16'd5, 16'd4,
-//                    16'd3, 16'd2, 16'd1, 16'd0
-//                  };
-
-//     weights_3x3 = '{
-//                   16'd8, 16'd7, 16'd6,
-//                   16'd5, 16'd4, 16'd3,
-//                   16'd2, 16'd1, 16'd0
-//                 };
-
-//     expected_output = '{
-//                       16'd258, 16'd294,
-//                       16'd402, 16'd438
-//                     };
-
-//     // Reset
-//     @(negedge clk) rst = 1'b0;
-
-//     // Test case: 3x3 convolution
-//     $display("Test: 3x3 convolution, Time: %0t", $time);
-
-//     en = 1'b1;
-
-//     for (int i = 0; i < MatrixSize*MatrixSize; i++)
-//     begin
-//       data = input_matrix[i];
-//       @(posedge clk);
-//       if (valid_conv_3x3)
-//       begin
-//         automatic int row = i / MatrixSize;
-//         automatic int col = i % MatrixSize;
-//         if (row >= KernelSize-1 && col >= KernelSize-1)
-//         begin
-//           automatic int output_index = (row-KernelSize+1)*2 + (col-KernelSize+1);
-//           assert(conv_3x3 == expected_output[output_index])
-//                 else
-//                   $error("3x3 convolution error at index %0d: expected %0d, got %0d",
-//                          output_index, expected_output[output_index], conv_3x3);
-//         end
-//       end
-//     end
-
-//     @(posedge clk);
-//     assert(end_conv_3x3 == 1'b1) else
-//             $error("3x3 convolution did not signal end_conv");
-
-//     $display("Test completed successfully!");
-//     $finish;
-//   end
-// endmodule
-
-// module tb_convolver;
-//   parameter MatrixSize = 4;  // Changed to 4 for the 4x4 activation map
-//   parameter KernelSize = 3;  // Changed to 3 for the 3x3 kernel
-//   parameter N = 16;
-
-//   // Inputs
-//   reg clk;
-//   reg en;
-//   reg rst;
-//   reg [N-1:0] activation;
-//   logic [N-1:0] weights_3x3 [KernelSize*KernelSize-1:0];
-
-//   // Outputs
-//   logic [2*N-1:0] conv_op;
-//   logic end_conv;
-//   logic valid_conv;
-//   integer i;
-
-//   // Instantiate the Unit Under Test (UUT)
-//   convolver #(
-//               .MatrixSize(MatrixSize),
-//               .KernelSize(KernelSize),
-//               .N(N)
-//             ) uut_3x3 (
-//               .clk_i(clk),
-//               .rst_i(rst),
-//               .en_i(en),
-//               .data_i(activation),
-//               .stride_i(6'd1),
-//               .matrix_size_i(MatrixSize), // size of the matrix
-//               .weights_i(weights_3x3),
-//               .conv_o(conv_op),
-//               .valid_conv_o(valid_conv),
-//               .end_conv_o(end_conv)
-//             );
-
-//   always #5 clk = ~clk;
-
-//   initial
-//   begin
-//     // Initialize Inputs
-//     clk = 0;
-//     en = 0;
-//     rst = 0;
-//     activation = 0;
-
-//     weights_3x3 = '{
-//                   16'd8, 16'd7, 16'd6,
-//                   16'd5, 16'd4, 16'd3,
-//                   16'd2, 16'd1, 16'd0
-//                 };
-
-//     // weights_3x3 = '{
-//     //               16'd0, 16'd1, 16'd2,
-//     //               16'd3, 16'd4, 16'd5,
-//     //               16'd6, 16'd7, 16'd8
-//     //             };
-//     // Wait 100 ns for global reset to finish
-//     #10;
-//     clk = 0;
-//     en = 0;
-//     activation = 0;
-//     rst =1;
-//     #10;
-//     rst =0;
-//     #10;
-//     en=1;
-//     //we use the same set of weights and activations as the sample input in the golden model (python code) above.
-//     for(i=0;i<255;i=i+1)
-//     begin
-//       activation = i;
-//       @(posedge clk);
-//     end
-//     $finish;
-//   end
-// endmodule

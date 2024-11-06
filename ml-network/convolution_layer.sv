@@ -1,6 +1,4 @@
 // TODO: add padding to the input matrix
-// TODO: add shifting to the sum
-// TODO: add activation functions on results
 module convolution_layer #(
     parameter [13:0] MaxMatrixSize = 16383, // maximum matrix size that this convolver can convolve
     parameter KernelSize = 3, // kernel size
@@ -14,7 +12,7 @@ module convolution_layer #(
     // Configuration Registers
     IBcfg1.read reg_bcfg1_i,
     IBcfg2.read reg_bcfg2_i,
-    // IBcfg3.read reg_bcfg3,
+    IBcfg3.read reg_bcfg3_i,
     ICprm1.read reg_cprm1_i,
 
     // Data Inputs
@@ -53,6 +51,7 @@ module convolution_layer #(
   logic [EngineCount-1:0] conv_done;
   logic [ConvOutputSize-1:0] conv_counter;
   logic conv_valid;
+  logic signed [N-1:0] data_conv [EngineCount-1:0];
 
 
   counter #( // Counts how many valid convolution results have been generated, used for bram addressing
@@ -99,8 +98,9 @@ module convolution_layer #(
 
       assign sum_accum = (reg_cprm1_i.accumulate_o) ? conv_result + prev_result : conv_result;
       assign sum = sum_accum >>> shift_amount;
+      assign sum_output = sum >>> reg_bcfg3_i.shift_final_o;
 
-      dual_port_bram #(
+      dual_port_bram #( //TODO: add gateing to save power when this is not used
                        .DataWidth(2*N),
                        .Depth(ConvOutputCount)
                      ) accumulate_prev_conv (
@@ -122,14 +122,43 @@ module convolution_layer #(
         assign conv_valid = valid;
 
       assign conv_done[i] = (i < reg_bcfg1.engine_count_o) ? done : 1'b1;
-      assign data_o[i] = (i < reg_bcfg1.engine_count_o && (reg_cprm1_i.save_to_ram_o || reg_cprm1_i.save_to_buffer_o) && valid) ? sum[N-1:0] : {N{1'b0}};
+      assign data_conv[i] = (i < reg_bcfg1.engine_count_o && (reg_cprm1_i.save_to_ram_o || reg_cprm1_i.save_to_buffer_o) && valid) ? sum_output : {N{1'b0}};
     end
   endgenerate
 
+  activation_layer #(
+                     .N(N),
+                     .EngineCount(EngineCount)
+                   ) layer_activation (
+                     .clk_i,
+                     .en_i(run_i),
+                     .activation_function_i(reg_cprm1_i.activation_function_o),
 
-  assign conv_done_o = (conv_done == {EngineCount{1'b1}});
+                     .value_i(data_conv),
+                     .value_o(data_o)
+                   );
+
+  d_ff #(
+         .Width(1)
+       ) conv_valid_delay_inst (
+         .clk_i,
+         .rst_i(1'b0),
+         .en_i(run_i),
+         .data_i((reg_cprm1_i.save_to_ram_o || reg_cprm1_i.save_to_buffer_o) ? conv_valid : 1'b0),
+         .data_o(conv_valid_o)
+       );
+
+  d_ff #(
+         .Width(1)
+       ) conv_done_delay_inst (
+         .clk_i,
+         .rst_i(1'b0),
+         .en_i(run_i),
+         .data_i(conv_done == {EngineCount{1'b1}}),
+         .data_o(conv_done_o)
+       );
+
   //assign status_o.running = run_i && !done;
-  assign conv_valid_o = (reg_cprm1_i.save_to_ram_o || reg_cprm1_i.save_to_buffer_o) ? conv_valid : 1'b0;
 endmodule
 
 
@@ -147,6 +176,7 @@ module tb_convolution_layer ();
 
   IBcfg1 #(.ResetValue(16'h0001)) reg_bcfg1();
   IBcfg2 #(.ResetValue(16'h0000)) reg_bcfg2();
+  IBcfg3 #(.ResetValue(16'h0000)) reg_bcfg3();
   ICprm1 #(.ResetValue(16'h0040)) reg_cprm1();
 
 
@@ -173,6 +203,7 @@ module tb_convolution_layer ();
                       // Configuration Registers
                       .reg_bcfg1_i(reg_bcfg1.read),
                       .reg_bcfg2_i(reg_bcfg2.read),
+                      .reg_bcfg3_i(reg_bcfg3.read),
                       .reg_cprm1_i(reg_cprm1.read),
 
                       // Data Inputs
@@ -215,6 +246,9 @@ module tb_convolution_layer ();
 
   assign reg_bcfg2.clk_i = clk;
   assign reg_bcfg2.rst_i = reg_reset;
+
+  assign reg_bcfg3.clk_i = clk;
+  assign reg_bcfg3.rst_i = reg_reset; // A reset is the only thing needed to configure this reg for this testbench
 
   assign reg_cprm1.clk_i = clk;
   assign reg_cprm1.rst_i = reg_reset;
