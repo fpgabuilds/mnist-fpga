@@ -2,7 +2,6 @@ module tb_aether_engine_example ();
 `include "../aether_constants.sv";
 
   logic clk;
-  logic clk_data;
   logic [23:0] cmd;
   logic [15:0] data_output;
   logic interrupt;
@@ -10,18 +9,18 @@ module tb_aether_engine_example ();
 
   aether_engine #(
                   .DataWidth(8),
-                  .MaxMatrixSize(5),
+                  .MaxMatrixSize(28),
                   .ConvEngineCount(2),
-                  .DenseEngineCount(5),
+                  .DenseEngineCount(4),
                   .ClkRate(143_000_000)
                 ) accelerator_inst (
                   .clk_i(clk),
-                  .clk_data_i(clk_data),
+                  .clk_data_i(clk),
                   .instruction_i(cmd[23:20]),
                   .param_1_i(cmd[19:16]),
                   .param_2_i(cmd[15:0]),
                   .data_o(data_output),
-                  .interrupt_o(),
+                  .interrupt_o(interrupt),
 
                   .sdram_clk_en_o(),
                   .sdram_bank_activate_o(),
@@ -37,7 +36,6 @@ module tb_aether_engine_example ();
 
   // Clock generation
   always #5 clk = ~clk;
-  always #10 clk_data = ~clk_data; // 1/2 the speed of the main clock, should make a different frequency later to test
 
   // Define a task to execute a command on the positive edge of the clock
   task execute_cmd(input [23:0] command);
@@ -60,6 +58,7 @@ module tb_aether_engine_example ();
     //execute_cmd({WRR, REG_BCFG3, 16'd0});
     execute_cmd({WRR, REG_CPRM1, 16'h0040});
 
+    @(posedge clk);
     assert_on = 1'b1; // I would like the reset to be able to be assert error free
 
     // Load Weights

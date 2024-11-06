@@ -63,7 +63,8 @@ module convolution_layer #(
             .start_val_i({ConvOutputSize{1'b0}}),
             .end_val_i({ConvOutputSize{1'b1}}),
             .count_by_i({{ConvOutputSize-1{1'b0}}, 1'b1}),
-            .count_o(conv_counter)
+            .count_o(conv_counter),
+            .assert_on_i
           );
 
   generate

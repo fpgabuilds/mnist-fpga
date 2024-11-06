@@ -53,7 +53,8 @@ module aether_engine_generic_mem #(
                         .rst_i(command_i != IDLE),
                         .start_val_i(start_address_i),
                         .end_val_i(end_address_i),
-                        .count_o(addr_count)
+                        .count_o(addr_count),
+                        .assert_on_i(1'b1)
                       );
 
 
@@ -114,4 +115,91 @@ module aether_engine_generic_mem #(
                     .sdram_dq_io
                   );
 
+endmodule
+
+module aether_engine_generic_mem_simp #(
+    parameter ClkRate = 143_000_000
+  ) (
+    input logic clk_i,
+    input logic rst_i,
+    input logic [1:0] command_i,
+    input logic [31:0] start_address_i,
+    input logic [31:0] end_address_i,
+    input logic [15:0] data_write_i,
+    output logic [15:0] data_read_o,
+    output logic data_read_valid_o,
+    output logic data_write_done_o,
+    output logic task_finished_o,
+
+    // These ports should be connected directly to the SDRAM chip
+    output logic sdram_clk_en_o,
+    output logic [2-1:0] sdram_bank_activate_o,
+    output logic [13-1:0] sdram_address_o,
+    output logic sdram_cs_o,
+    output logic sdram_row_addr_strobe_o,
+    output logic sdram_column_addr_strobe_o,
+    output logic sdram_we_o,
+    output logic [2-1:0] sdram_dqm_o,
+    inout wire [16-1:0] sdram_dq_io,
+
+    input logic assert_on_i
+  );
+
+  localparam IDLE = 2'b00;
+  localparam WRITE = 2'b01;
+  localparam READ = 2'b10;
+
+  always @(posedge clk_i)
+  begin
+    if (assert_on_i)
+    begin
+      assert (command_i == IDLE || command_i == WRITE || command_i == READ) else
+               $error("command_i must be 0, 1, or 2");
+      assert (addr_count < {25{1'b1}}) else
+               $error("addr_count must be less than 2^25");
+    end
+  end
+
+  logic [31:0] addr_count; // Total count
+
+  increment_then_stop #(
+                        .Bits(32)
+                      ) addr_counter (
+                        .clk_i,
+                        .en_i(1'b1),
+                        .rst_i((command_i != IDLE) || rst_i),
+                        .start_val_i(start_address_i),
+                        .end_val_i(end_address_i),
+                        .count_o(addr_count),
+                        .assert_on_i
+                      );
+
+  logic [15:0] bram_output;
+  single_port_bram #(
+                     .DataWidth(16),
+                     .Depth(2**16 - 1)
+                   ) memory_store_inst (
+                     .clk_i,
+                     .write_en_i(command_i == WRITE),
+                     .addr_i(addr_count[15:0]),
+                     .data_i(data_write_i),
+                     .data_o(bram_output)
+                   );
+
+  assign data_read_o = (command_i == READ)? bram_output : 16'h0000;
+
+  //unused ports
+  assign data_read_valid_o = 1'b0;
+  assign data_write_done_o = 1'b0;
+  assign task_finished_o = 1'b0;
+
+  assign sdram_clk_en_o = 1'b0;
+  assign sdram_bank_activate_o = 2'b00;
+  assign sdram_address_o = 13'h0000;
+  assign sdram_cs_o = 1'b0;
+  assign sdram_row_addr_strobe_o = 1'b0;
+  assign sdram_column_addr_strobe_o = 1'b0;
+  assign sdram_we_o = 1'b0;
+  assign sdram_dqm_o = 2'b00;
+  assign sdram_dq_io = 16'h0000;
 endmodule

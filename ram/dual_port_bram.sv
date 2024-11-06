@@ -67,18 +67,26 @@ module dual_port_bram2 #(
     input logic b_write_en_i,
     input logic [BAddrSize-1:0] b_addr_i,
     input logic [BDataWidth-1:0] b_data_i,
-    output logic [BDataWidth-1:0] b_data_o
+    output logic [BDataWidth-1:0] b_data_o,
+
+    input logic assert_on_i
   );
   always @(posedge a_clk_i)
   begin
-    assert (a_addr_i < BitDepth / ADataWidth) else
-             $error("Address out of bounds");
+    if (assert_on_i)
+    begin
+      assert (a_addr_i < BitDepth / ADataWidth) else
+               $error("Address A out of bounds");
+    end
   end
 
   always @(posedge b_clk_i)
   begin
-    assert (b_addr_i < BitDepth / BDataWidth) else
-             $error("Address out of bounds");
+    if (assert_on_i)
+    begin
+      assert (b_addr_i < BitDepth / BDataWidth) else
+               $error("Address B out of bounds");
+    end
   end
 
   logic [BitDepth-1:0] memory;

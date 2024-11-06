@@ -53,6 +53,8 @@ module aether_engine #(
   logic rst_conv;
   logic rst_dense_weight;
   logic rst_dense;
+  logic rst_regs;
+  logic rst_full;
 
   // Load Weights Signals
   logic load_conv_weights;
@@ -88,8 +90,6 @@ module aether_engine #(
   // Register Interfaces
   //------------------------------------------------------------------------------------
 
-  logic reg_reset;
-
   IVersn #(.ResetValue(16'h6C00)) reg_versn();
   IHwrid #(.ResetValue(16'hB2E9)) reg_hwrid();
   IMemup #(.ResetValue(16'h0000)) reg_memup();
@@ -102,28 +102,28 @@ module aether_engine #(
   IStats #(.ResetValue(16'h2240)) reg_stats();
 
   assign reg_memup.clk_i = clk_i;
-  assign reg_memup.rst_i = reg_reset;
+  assign reg_memup.rst_i = rst_regs;
 
   assign reg_mstrt.clk_i = clk_i;
-  assign reg_mstrt.rst_i = reg_reset;
+  assign reg_mstrt.rst_i = rst_regs;
 
   assign reg_mendd.clk_i = clk_i;
-  assign reg_mendd.rst_i = reg_reset;
+  assign reg_mendd.rst_i = rst_regs;
 
   assign reg_bcfg1.clk_i = clk_i;
-  assign reg_bcfg1.rst_i = reg_reset;
+  assign reg_bcfg1.rst_i = rst_regs;
 
   assign reg_bcfg2.clk_i = clk_i;
-  assign reg_bcfg2.rst_i = reg_reset;
+  assign reg_bcfg2.rst_i = rst_regs;
 
   assign reg_bcfg3.clk_i = clk_i;
-  assign reg_bcfg3.rst_i = reg_reset;
+  assign reg_bcfg3.rst_i = rst_regs;
 
   assign reg_cprm1.clk_i = clk_i;
-  assign reg_cprm1.rst_i = reg_reset;
+  assign reg_cprm1.rst_i = rst_regs;
 
   assign reg_stats.clk_i = clk_i;
-  assign reg_stats.rst_i = reg_reset;
+  assign reg_stats.rst_i = rst_regs;
 
 
   //------------------------------------------------------------------------------------
@@ -145,7 +145,7 @@ module aether_engine #(
                  ) simple_counter_inst (
                    .clk_i(clk_data_i),
                    .en_i(instruction_i == LIP && param_1 == LIP_CONT), // Continue load input buffer
-                   .rst_i(instruction_i == LIP && param_1 == LIP_STRT), // Start load input buffer
+                   .rst_i((instruction_i == LIP && param_1 == LIP_STRT) || rst_full), // Start load input buffer. TODO: do I really want to reset on full?
                    .count_o(input_buffer_addr)
                  );
 
@@ -157,7 +157,8 @@ module aether_engine #(
                         .rst_i(rst_conv),
                         .start_val_i({BAddrSize{1'b0}}),
                         .end_val_i(InputBufferWordsOutput[BAddrSize-1:0]),
-                        .count_o(input_buffer_count)
+                        .count_o(input_buffer_count),
+                        .assert_on_i
                       );
 
   dual_port_bram2 #(
@@ -178,7 +179,9 @@ module aether_engine #(
                     .b_write_en_i(1'b0),
                     .b_addr_i(input_buffer_count),
                     .b_data_i({DataWidth{1'b0}}),
-                    .b_data_o(input_buffer_data)
+                    .b_data_o(input_buffer_data),
+
+                    .assert_on_i
                   );
 
 
@@ -236,7 +239,8 @@ module aether_engine #(
             .start_val_i({ConvEngineCountSize{1'b0}}),
             .end_val_i(ConvEngineCount[ConvEngineCountSize-1:0]),
             .count_by_i({{{ConvEngineCountSize-1}{1'b0}}, {1'b1}}),
-            .count_o(conv_weight_count)
+            .count_o(conv_weight_count),
+            .assert_on_i
           );
 
   genvar i;
@@ -371,6 +375,7 @@ module aether_engine #(
                           .rst_dwgt_o(rst_dense_weight),
                           .rst_dens_o(rst_dense),
                           .rst_regs_o(rst_regs),
+                          .rst_full_o(rst_full),
 
                           // Load Weights Variables
                           .ldw_cwgt_o(load_conv_weights),
@@ -402,30 +407,33 @@ module aether_engine #(
   assign command = mem_load_enable? READ : IDLE;
   assign data_write = 16'b0; // TODO: Implement this
 
-  aether_engine_generic_mem #(
-                              .ClkRate(ClkRate)
-                            ) sys_ram_inst (
-                              .clk_i,
-                              .command_i(command),
-                              .start_address_i({reg_memup.mem_upper_o, reg_mstrt.mem_start_o}),
-                              .end_address_i({reg_memup.mem_upper_o, reg_mendd.mem_end_o}),
-                              .data_write_i(data_write),
-                              .data_read_o(mem_data_read),
-                              .data_read_valid_o(mem_data_read_valid),
-                              .data_write_done_o(mem_data_write_done),
-                              .task_finished_o(mem_task_finished),
+  aether_engine_generic_mem_simp #(
+                                   .ClkRate(ClkRate)
+                                 ) sys_ram_inst (
+                                   .clk_i,
+                                   .rst_i(rst_full),
+                                   .command_i(command),
+                                   .start_address_i({reg_memup.mem_upper_o, reg_mstrt.mem_start_o}),
+                                   .end_address_i({reg_memup.mem_upper_o, reg_mendd.mem_end_o}),
+                                   .data_write_i(data_write),
+                                   .data_read_o(mem_data_read),
+                                   .data_read_valid_o(mem_data_read_valid),
+                                   .data_write_done_o(mem_data_write_done),
+                                   .task_finished_o(mem_task_finished),
 
-                              // These ports should be connected directly to the SDRAM chip
-                              .sdram_clk_en_o,
-                              .sdram_bank_activate_o,
-                              .sdram_address_o,
-                              .sdram_cs_o,
-                              .sdram_row_addr_strobe_o,
-                              .sdram_column_addr_strobe_o,
-                              .sdram_we_o,
-                              .sdram_dqm_o,
-                              .sdram_dq_io
-                            );
+                                   // These ports should be connected directly to the SDRAM chip
+                                   .sdram_clk_en_o,
+                                   .sdram_bank_activate_o,
+                                   .sdram_address_o,
+                                   .sdram_cs_o,
+                                   .sdram_row_addr_strobe_o,
+                                   .sdram_column_addr_strobe_o,
+                                   .sdram_we_o,
+                                   .sdram_dqm_o,
+                                   .sdram_dq_io,
+
+                                   .assert_on_i
+                                 );
 endmodule
 
 

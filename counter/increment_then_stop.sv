@@ -8,14 +8,16 @@ module increment_then_stop #(
     input logic rst_i, // Reset signal, when low the counter will be reset to the start value. Not tied to the clock
     input logic [Bits-1:0] start_val_i, // The value the counter will be set to when rst_i is high
     input logic [Bits-1:0] end_val_i, // The value the counter will stop at
-    output logic [Bits-1:0] count_o // The current value of the counter, will start at start_val_i and increment until end_val_i
+    output logic [Bits-1:0] count_o, // The current value of the counter, will start at start_val_i and increment until end_val_i
+    input logic assert_on_i
   );
   always @(posedge clk_i)
   begin
-    assert (Bits > 0) else
-             $error("Bits must be greater than 0");
-    assert (end_val_i >= start_val_i) else
-             $error("end_val_i must be greater than or equal to start_val_i");
+    if (assert_on_i)
+    begin
+      assert (end_val_i >= start_val_i) else
+               $error("end_val_i must be greater than or equal to start_val_i");
+    end
   end
 
 
@@ -50,7 +52,8 @@ module tb_increment_then_stop;
                         .rst_i(rst),
                         .start_val_i(start_val),
                         .end_val_i(end_val),
-                        .count_o(count)
+                        .count_o(count),
+                        .assert_on_i(1'b1)
                       );
 
   // Clock generation

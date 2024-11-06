@@ -76,7 +76,8 @@ module de10_lite_sdram #(
                         .rst_i(rst_i || (command_buffer == IDLE && !read_started)), // Reset signal, when low the counter will be reset to the start value. Not tied to the clock
                         .start_val_i(6'b0), // The value the counter will be set to when rst_i is high
                         .end_val_i(SdramReadBurstLength[5:0] + 6'd1), // The value the counter will stop at
-                        .count_o(burst_read_counter) // The current value of the counter, will start at start_val_i and increment until end_val_i
+                        .count_o(burst_read_counter), // The current value of the counter, will start at start_val_i and increment until end_val_i
+                        .assert_on_i(1'b1)
                       );
 
   increment_then_stop #(
@@ -87,7 +88,8 @@ module de10_lite_sdram #(
                         .rst_i(rst_i || (command_buffer == IDLE && !write_started)),
                         .start_val_i(6'd0),
                         .end_val_i(SdramWriteBurst ? SdramReadBurstLength[5:0] : 6'b1),
-                        .count_o(burst_write_counter)
+                        .count_o(burst_write_counter),
+                        .assert_on_i(1'b1)
                       );
 
   single_port_bram #(

@@ -7,14 +7,16 @@ module counter #(
     input logic [Bits-1:0] start_val_i,
     input logic [Bits-1:0] end_val_i,
     input logic [Bits-1:0] count_by_i,
-    output logic [Bits-1:0] count_o
+    output logic [Bits-1:0] count_o,
+    input logic assert_on_i
   );
   always @(posedge clk_i)
   begin
-    assert (Bits > 0) else
-             $error("Bits must be greater than 0");
-    assert (end_val_i >= start_val_i) else
-             $error("end_val_i must be greater than or equal to start_val_i");
+    if (assert_on_i)
+    begin
+      assert (end_val_i >= start_val_i) else
+               $error("end_val_i must be greater than or equal to start_val_i");
+    end
   end
 
   logic [Bits-1:0] next_count;
@@ -48,7 +50,8 @@ module tb_counter;
             .start_val_i(start_val),
             .end_val_i(end_val),
             .count_by_i(count_by),
-            .count_o(count)
+            .count_o(count),
+            .assert_on_i(1'b1)
           );
 
   // Clock generation

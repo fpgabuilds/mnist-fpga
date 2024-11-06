@@ -128,7 +128,8 @@ module convolver #(
                         .rst_i,
                         .start_val_i({ClkCountSize{1'b0}}),
                         .end_val_i(max_clk_count), // it does not matter if the actual matrix is smaller as the end
-                        .count_o(clk_count)        // of the convolution is signaled by the end_conv_o signal
+                        .count_o(clk_count),        // of the convolution is signaled by the end_conv_o signal
+                        .assert_on_i
                       );
 
   assign min_cycles = clk_count > ((KernelSize-1)*matrix_size_i+KernelSize-1);
@@ -156,7 +157,8 @@ module convolver #(
             .start_val_i({ConvCountSize{1'b0}}),
             .end_val_i(max_conv_count),
             .count_by_i({{ConvCountSize-1{1'b0}}, 1'b1}),
-            .count_o(conv_count)
+            .count_o(conv_count),
+            .assert_on_i
           );
 
   counter #(
@@ -168,7 +170,8 @@ module convolver #(
             .start_val_i({InvConcCountSize{1'b0}}),
             .end_val_i(max_inv_count),
             .count_by_i({{InvConcCountSize-1{1'b0}}, 1'b1}),
-            .count_o(inv_count)
+            .count_o(inv_count),
+            .assert_on_i
           );
 
   always_ff @(posedge clk_i or posedge rst_i)
@@ -194,7 +197,8 @@ module convolver #(
                         .rst_i,
                         .start_val_i({RowCountSize{1'b0}}),
                         .end_val_i({RowCountSize{1'b1}}),
-                        .count_o(row_count)
+                        .count_o(row_count),
+                        .assert_on_i
                       );
 
   logic a;

@@ -35,6 +35,7 @@ module aether_engine_decoder (
     output logic rst_dwgt_o,
     output logic rst_dens_o,
     output logic rst_regs_o,
+    output logic rst_full_o,
 
     // Load Weights Variables
     output logic ldw_cwgt_o,
@@ -72,6 +73,7 @@ module aether_engine_decoder (
     rst_dwgt_o = 1'b0;
     rst_dens_o = 1'b0;
     rst_regs_o = 1'b0;
+    rst_full_o = 1'b0;
 
     if (instruction_i == RST)
     begin
@@ -83,6 +85,7 @@ module aether_engine_decoder (
           rst_dwgt_o = 1'b1;
           rst_dens_o = 1'b1;
           rst_regs_o = 1'b1;
+          rst_full_o = 1'b1;
         end
         RST_CWGT:
           rst_cwgt_o = 1'b1;
@@ -102,6 +105,7 @@ module aether_engine_decoder (
           rst_dwgt_o = 1'b1;
           rst_dens_o = 1'b1;
           rst_regs_o = 1'b1;
+          rst_full_o = 1'b1;
         end
       endcase
     end
