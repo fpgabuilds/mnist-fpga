@@ -72,10 +72,10 @@ module de10_lite_sdram #(
                         .Bits(6) // Number of bits in the counter, this can be found using $clog2(N+1) where N is the maximum value of the counter
                       ) burst_read_counter_inst (
                         .clk_i, // Clock input
-                        .run_i(read_started), // Run signal, when high the counter will increment, when low the counter will not change but will hold the current value
+                        .en_i(read_started), // Run signal, when high the counter will increment, when low the counter will not change but will hold the current value
                         .rst_i(rst_i || (command_buffer == IDLE && !read_started)), // Reset signal, when low the counter will be reset to the start value. Not tied to the clock
                         .start_val_i(6'b0), // The value the counter will be set to when rst_i is high
-                        .end_val_i(SdramReadBurstLength+1), // The value the counter will stop at
+                        .end_val_i(SdramReadBurstLength[5:0] + 6'd1), // The value the counter will stop at
                         .count_o(burst_read_counter) // The current value of the counter, will start at start_val_i and increment until end_val_i
                       );
 
@@ -83,10 +83,10 @@ module de10_lite_sdram #(
                         .Bits(6)
                       ) burst_write_counter_inst (
                         .clk_i,
-                        .run_i(write_started),
+                        .en_i(write_started),
                         .rst_i(rst_i || (command_buffer == IDLE && !write_started)),
                         .start_val_i(6'd0),
-                        .end_val_i(SdramWriteBurst ? SdramReadBurstLength : 6'b1),
+                        .end_val_i(SdramWriteBurst ? SdramReadBurstLength[5:0] : 6'b1),
                         .count_o(burst_write_counter)
                       );
 

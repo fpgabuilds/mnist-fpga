@@ -56,7 +56,7 @@ interface IMemup #(
 
   modport read (output mem_upper_o);
   modport read_full (output register_o);
-  modport write_ext (input register_o, we_i);
+  modport write_ext (input register_i, we_i);
   modport reg_ctrl (input clk_i, rst_i);
 
   always_ff @(posedge clk_i or posedge rst_i)
@@ -91,7 +91,7 @@ interface IMstrt #(
 
   modport read (output mem_start_o);
   modport read_full (output register_o);
-  modport write_ext (input register_o, we_i);
+  modport write_ext (input register_i, we_i);
   modport reg_ctrl (input clk_i, rst_i);
 
   always_ff @(posedge clk_i or posedge rst_i)
@@ -126,7 +126,7 @@ interface IMendd #(
 
   modport read (output mem_end_o);
   modport read_full (output register_o);
-  modport write_ext (input register_o, we_i);
+  modport write_ext (input register_i, we_i);
   modport reg_ctrl (input clk_i, rst_i);
 
   always_ff @(posedge clk_i or posedge rst_i)
@@ -280,7 +280,7 @@ interface ICprm1 #(
 
   modport read (output padding_o, padding_fill_o, stride_o, activation_function_o, accumulate_o, save_to_ram_o, save_to_buffer_o);
   modport read_full (output register_o);
-  modport write_ext (input register_o, we_i);
+  modport write_ext (input register_i, we_i);
   modport reg_ctrl (input clk_i, rst_i);
 
   always_ff @(posedge clk_i or posedge rst_i)

@@ -7,7 +7,7 @@ module convolution_layer #(
   ) (
     input logic clk_i, // clock
     input logic rst_i,
-    input logic run_i, // run the convolution
+    input logic en_i, // run the convolution
 
     // Configuration Registers
     IBcfg1.read reg_bcfg1_i,
@@ -58,7 +58,7 @@ module convolution_layer #(
             .Bits(ConvOutputSize)
           ) conv_counter_inst (
             .clk_i, // 1st engine is always active
-            .en_i(conv_valid && run_i),
+            .en_i(conv_valid && en_i),
             .rst_i,
             .start_val_i({ConvOutputSize{1'b0}}),
             .end_val_i({ConvOutputSize{1'b1}}),
@@ -85,7 +85,7 @@ module convolution_layer #(
                 ) conv_inst (
                   .clk_i,
                   .rst_i,
-                  .en_i((i < reg_bcfg1.engine_count_o) ? run_i : 1'b0),
+                  .en_i((i < reg_bcfg1.engine_count_o) ? en_i : 1'b0),
                   .data_i(activation_data_i),
                   .stride_i(reg_cprm1_i.stride_o),
                   .matrix_size_i(reg_bcfg2_i.matrix_size_o),
@@ -131,7 +131,7 @@ module convolution_layer #(
                      .EngineCount(EngineCount)
                    ) layer_activation (
                      .clk_i,
-                     .en_i(run_i),
+                     .en_i,
                      .activation_function_i(reg_cprm1_i.activation_function_o),
 
                      .value_i(data_conv),
@@ -143,7 +143,7 @@ module convolution_layer #(
        ) conv_valid_delay_inst (
          .clk_i,
          .rst_i(1'b0),
-         .en_i(run_i),
+         .en_i,
          .data_i((reg_cprm1_i.save_to_ram_o || reg_cprm1_i.save_to_buffer_o) ? conv_valid : 1'b0),
          .data_o(conv_valid_o)
        );
@@ -153,12 +153,12 @@ module convolution_layer #(
        ) conv_done_delay_inst (
          .clk_i,
          .rst_i(1'b0),
-         .en_i(run_i),
+         .en_i,
          .data_i(conv_done == {EngineCount{1'b1}}),
          .data_o(conv_done_o)
        );
 
-  //assign status_o.running = run_i && !done;
+  //assign status_o.running = en_i && !done;
 endmodule
 
 
@@ -198,7 +198,7 @@ module tb_convolution_layer ();
                     ) uut (
                       .clk_i(clk), // clock
                       .rst_i(rst), // reset active low
-                      .run_i(en), // run the convolution
+                      .en_i(en), // run the convolution
 
                       // Configuration Registers
                       .reg_bcfg1_i(reg_bcfg1.read),

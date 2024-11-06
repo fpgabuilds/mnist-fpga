@@ -4,7 +4,7 @@ module increment_then_stop #(
     parameter Bits = 8 // Number of bits in the counter, this can be found using $clog2(N+1) where N is the maximum value of the counter
   ) (
     input logic clk_i, // Clock input
-    input logic run_i, // Run signal, when high the counter will increment, when low the counter will not change but will hold the current value
+    input logic en_i, // Run signal, when high the counter will increment, when low the counter will not change but will hold the current value
     input logic rst_i, // Reset signal, when low the counter will be reset to the start value. Not tied to the clock
     input logic [Bits-1:0] start_val_i, // The value the counter will be set to when rst_i is high
     input logic [Bits-1:0] end_val_i, // The value the counter will stop at
@@ -25,7 +25,7 @@ module increment_then_stop #(
   begin
     if (rst_i)
       count_o <= start_val_i;
-    else if (run_i)
+    else if (en_i)
       count_o <= next_count;
   end
 
@@ -46,7 +46,7 @@ module tb_increment_then_stop;
 
   increment_then_stop #(.Bits(Bits)) dut (
                         .clk_i(clk),
-                        .run_i(run),
+                        .en_i(run),
                         .rst_i(rst),
                         .start_val_i(start_val),
                         .end_val_i(end_val),

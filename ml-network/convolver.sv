@@ -46,7 +46,6 @@ module convolver #(
       begin
         mac #(.N(N)) mac_start (
               .clk_i,
-              .rst_i,
               .en_i,
               .value_i(data_i),
               .mult_i(weights_i[i]),
@@ -60,7 +59,6 @@ module convolver #(
         begin
           mac #(.N(N)) mac_final (
                 .clk_i,
-                .rst_i,
                 .en_i,
                 .value_i(data_i),
                 .mult_i(weights_i[i]),
@@ -73,7 +71,6 @@ module convolver #(
           logic signed [2*N-1:0] end_row_data;
           mac #(.N(N)) mac_end_row (
                 .clk_i,
-                .rst_i,
                 .en_i,
                 .value_i(data_i),
                 .mult_i(weights_i[i]),
@@ -88,7 +85,7 @@ module convolver #(
                                ) row_shift (
                                  .clk_i,
                                  .en_i,
-                                 .rst_i,
+                                 .rst_i(),
                                  .rst_val_i({2*N{1'b0}}),
                                  .data_i(end_row_data),
                                  .data_o(),
@@ -101,7 +98,6 @@ module convolver #(
       begin
         mac #(.N(N)) mac_middle (
               .clk_i,
-              .rst_i,
               .en_i,
               .value_i(data_i),
               .mult_i(weights_i[i]),
@@ -127,9 +123,9 @@ module convolver #(
   increment_then_stop #(
                         .Bits(ClkCountSize)
                       ) clk_counter ( // Counts total clock cycles used in this convolution
-                        .clk_i(clk_i),
-                        .run_i(en_i),
-                        .rst_i(rst_i),
+                        .clk_i,
+                        .en_i,
+                        .rst_i,
                         .start_val_i({ClkCountSize{1'b0}}),
                         .end_val_i(max_clk_count), // it does not matter if the actual matrix is smaller as the end
                         .count_o(clk_count)        // of the convolution is signaled by the end_conv_o signal
@@ -193,9 +189,9 @@ module convolver #(
   increment_then_stop #(
                         .Bits(RowCountSize)
                       ) row_counter ( // Counts total clock cycles used in this convolution
-                        .clk_i(clk_i),
-                        .run_i(conv_count == matrix_size_i-KernelSize),
-                        .rst_i(rst_i),
+                        .clk_i,
+                        .en_i(conv_count == matrix_size_i-KernelSize),
+                        .rst_i,
                         .start_val_i({RowCountSize{1'b0}}),
                         .end_val_i({RowCountSize{1'b1}}),
                         .count_o(row_count)

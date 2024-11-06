@@ -63,8 +63,7 @@ module aether_engine #(
 
   // Convolution Signals
   logic run_conv;
-  logic [3:0] conv_count;
-  logic [31:0] conv_mem_count;
+  logic [19:0] cnv_save_addr;
 
   logic signed [DataWidth-1:0] conv_data [ConvEngineCount-1:0];
   logic conv_valid;
@@ -72,12 +71,9 @@ module aether_engine #(
 
   // Dense Signals
   logic run_dense;
-  logic [3:0] dense_count;
-
-  logic [31:0] dense_mem_count;
+  logic [19:0] dns_save_addr;
 
   // Memory Signals
-  logic [31:0] mem_addr_start;
   logic mem_load_enable;
   logic [15:0] mem_data_read;
 
@@ -135,8 +131,9 @@ module aether_engine #(
   //------------------------------------------------------------------------------------
 
   localparam InputBufferBits = MaxMatrixSize**2 * DataWidth;
+  localparam InputBufferWordsOutput = InputBufferBits / DataWidth;
   localparam AAddrSize = $clog2((InputBufferBits / 16) + 1);
-  localparam BAddrSize = $clog2((InputBufferBits / DataWidth) + 1);
+  localparam BAddrSize = $clog2((InputBufferWordsOutput) + 1);
 
   logic [AAddrSize-1:0] input_buffer_addr;
   logic load_from_input_buffer;
@@ -156,10 +153,10 @@ module aether_engine #(
                         .Bits(BAddrSize)
                       ) data_buffer_counter_inst (
                         .clk_i,
-                        .run_i(load_from_input_buffer),
+                        .en_i(load_from_input_buffer),
                         .rst_i(rst_conv),
                         .start_val_i({BAddrSize{1'b0}}),
-                        .end_val_i(InputBufferBits / DataWidth),
+                        .end_val_i(InputBufferWordsOutput[BAddrSize-1:0]),
                         .count_o(input_buffer_count)
                       );
 
@@ -180,7 +177,7 @@ module aether_engine #(
                     .b_clk_i(clk_i),
                     .b_write_en_i(1'b0),
                     .b_addr_i(input_buffer_count),
-                    .b_data_i({BAddrSize{1'b0}}),
+                    .b_data_i({DataWidth{1'b0}}),
                     .b_data_o(input_buffer_data)
                   );
 
@@ -237,7 +234,7 @@ module aether_engine #(
             .en_i(1'b1),
             .rst_i(rst_conv_weight),
             .start_val_i({ConvEngineCountSize{1'b0}}),
-            .end_val_i(ConvEngineCount),
+            .end_val_i(ConvEngineCount[ConvEngineCountSize-1:0]),
             .count_by_i({{{ConvEngineCountSize-1}{1'b0}}, {1'b1}}),
             .count_o(conv_weight_count)
           );
@@ -266,8 +263,6 @@ module aether_engine #(
   //------------------------------------------------------------------------------------
   // Convolution Module
   //------------------------------------------------------------------------------------
-  assign conv_mem_count = reg_bcfg1.engine_count_o * reg_bcfg2.matrix_size_o ** 2 * Ratio * conv_count; // TODO: seems like a 16 dsp to preform this, fix later
-
   // Load data
   logic conv_no_data;
   logic signed [DataWidth-1:0] conv_activation_data;
@@ -295,11 +290,12 @@ module aether_engine #(
                     ) conv_layer_inst (
                       .clk_i, // clock
                       .rst_i(rst_conv), // reset active low
-                      .run_i(!conv_no_data), // run the convolution
+                      .en_i(!conv_no_data), // run the convolution
 
                       // Configuration Registers
                       .reg_bcfg1_i(reg_bcfg1.read),
                       .reg_bcfg2_i(reg_bcfg2.read),
+                      .reg_bcfg3_i(reg_bcfg3.read),
                       .reg_cprm1_i(reg_cprm1.read),
 
                       // Data Inputs
@@ -323,13 +319,16 @@ module aether_engine #(
                 .EngineCount(1024)
               ) dense_inst (
                 .clk_i,
-                .rst_i(),
                 .en_i(),
                 .value_i(),
                 .weight_i(),
                 .dense_o(),
 
-                .config_1_i()  //accum = 1 for 1x1 conv, and 0 for dense
+                // Configuration Registers
+                .reg_bcfg1_i(reg_bcfg1.read),
+                .reg_bcfg2_i(reg_bcfg2.read),
+                .reg_bcfg3_i(reg_bcfg3.read),
+                .reg_cprm1_i(reg_cprm1.read)
               );
 
 
@@ -379,14 +378,13 @@ module aether_engine #(
 
                           // Convolution Variables
                           .cnv_run_o(run_conv),
-                          .cnv_count_o(conv_count),
+                          .cnv_save_addr_o(cnv_save_addr),
 
                           // Dense Variables
                           .dns_run_o(run_dense),
-                          .dns_count_o(dense_count),
+                          .dns_save_addr_o(dns_save_addr),
 
                           // Memory Variables
-                          .mem_addr_start_o(mem_addr_start),
                           .mem_load_enable_o(mem_load_enable)
                         );
 
@@ -400,32 +398,17 @@ module aether_engine #(
 
   logic [1:0] command;
   logic [15:0] data_write;
-  logic [31:0] count_total;
 
   assign command = mem_load_enable? READ : IDLE;
   assign data_write = 16'b0; // TODO: Implement this
-
-  always_comb
-  begin
-    count_total = 32'b0;
-
-    if (load_conv_weights)
-      count_total = conv_weight_mem_count;
-    else if (load_dense_weights)
-      count_total = dense_weight_mem_count;
-    else if (run_conv)
-      count_total = conv_mem_count;
-    else if (run_dense)
-      count_total = dense_mem_count; // TODO: this depends on 1x1 or dense mode
-  end
 
   aether_engine_generic_mem #(
                               .ClkRate(ClkRate)
                             ) sys_ram_inst (
                               .clk_i,
                               .command_i(command),
-                              .start_address_i(mem_addr_start),
-                              .count_total_i(count_total),
+                              .start_address_i({reg_memup.mem_upper_o, reg_mstrt.mem_start_o}),
+                              .end_address_i({reg_memup.mem_upper_o, reg_mendd.mem_end_o}),
                               .data_write_i(data_write),
                               .data_read_o(mem_data_read),
                               .data_read_valid_o(mem_data_read_valid),

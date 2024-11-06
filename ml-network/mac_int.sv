@@ -4,7 +4,6 @@ module mac #(
     parameter N = 16
   )(
     input logic clk_i,
-    input logic rst_i,
     input logic en_i,
     input logic signed [N-1:0] value_i,
     input logic signed [N-1:0] mult_i,
@@ -16,11 +15,9 @@ module mac #(
   assign mult = mult_i * value_i;
   assign mac_result = mult + add_i;
 
-  always_ff @(posedge clk_i or posedge rst_i)
+  always_ff @(posedge clk_i)
   begin
-    if (rst_i)
-      mac_o <= 0;
-    else if (en_i)
+    if (en_i)
       mac_o <= mac_result;
   end
 endmodule

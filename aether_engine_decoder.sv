@@ -49,7 +49,6 @@ module aether_engine_decoder (
     output logic [19:0] dns_save_addr_o,
 
     // Memory Variables
-    output logic [31:0] mem_addr_start_o,
     output logic mem_load_enable_o
   );
 
@@ -290,6 +289,5 @@ module aether_engine_decoder (
   //------------------------------------------------------------------------------------
 
   assign mem_load_enable_o = (instruction_i == LDW || instruction_i == CNV || instruction_i == DNS);
-  assign mem_addr_start_o = mem_load_enable_o? {reg_memup_o.register_o, reg_mstrt_o.register_o} : 32'h0000;
 
 endmodule

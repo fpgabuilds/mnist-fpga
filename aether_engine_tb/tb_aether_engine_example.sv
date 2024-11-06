@@ -6,6 +6,7 @@ module tb_aether_engine_example ();
   logic [23:0] cmd;
   logic [15:0] data_output;
   logic interrupt;
+  logic assert_on;
 
   aether_engine #(
                   .DataWidth(8),
@@ -30,7 +31,8 @@ module tb_aether_engine_example ();
                   .sdram_column_addr_strobe_o(),
                   .sdram_we_o(),
                   .sdram_dqm_o(),
-                  .sdram_dq_io()
+                  .sdram_dq_io(),
+                  .assert_on_i(assert_on)
                 );
 
   // Clock generation
@@ -47,15 +49,9 @@ module tb_aether_engine_example ();
   begin
     clk = 1'b0;
     cmd = 24'b0;
+    assert_on = 1'b0;
 
     execute_cmd({RST, RST_FULL, 16'b0});
-
-    // Load Weights
-    //execute_cmd({WRR, REG_MSTRT, 16'd0});
-    //execute_cmd({WRR, REG_MENDD, 16'd0});
-    execute_cmd({LDW, LDW_CWGT, 16'hXXXX}); // Make this similar to the load input data with a start and cont
-    //...
-    execute_cmd({LDW, LDW_CWGT, 16'hXXXX}); // Actually moves from memory to the hardware
 
     //execute_cmd({WRR, REG_MSTRT, 16'd0});
     //execute_cmd({WRR, REG_MENDD, 16'd0});
@@ -63,6 +59,15 @@ module tb_aether_engine_example ();
     execute_cmd({WRR, REG_BCFG2, 16'h0004});
     //execute_cmd({WRR, REG_BCFG3, 16'd0});
     execute_cmd({WRR, REG_CPRM1, 16'h0040});
+
+    assert_on = 1'b1; // I would like the reset to be able to be assert error free
+
+    // Load Weights
+    //execute_cmd({WRR, REG_MSTRT, 16'd0});
+    //execute_cmd({WRR, REG_MENDD, 16'd0});
+    execute_cmd({LDW, LDW_CWGT, 16'hXXXX}); // Make this similar to the load input data with a start and cont
+    //...
+    execute_cmd({LDW, LDW_CWGT, 16'hXXXX}); // Actually moves from memory to the hardware
 
     execute_cmd({LIP, LIP_STRT, 16'hXXXX});
     execute_cmd({LIP, LIP_CONT, 16'hXXXX}); //Repeat for all image data

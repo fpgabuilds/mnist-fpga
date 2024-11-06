@@ -4,7 +4,7 @@ module aether_engine_generic_mem #(
     input logic clk_i,
     input logic [1:0] command_i,
     input logic [31:0] start_address_i,
-    input logic [31:0] count_total_i,
+    input logic [31:0] end_address_i,
     input logic [15:0] data_write_i,
     output logic [15:0] data_read_o,
     output logic data_read_valid_o,
@@ -49,10 +49,10 @@ module aether_engine_generic_mem #(
                         .Bits(32)
                       ) addr_counter (
                         .clk_i,
-                        .run_i(!busy),
+                        .en_i(!busy),
                         .rst_i(command_i != IDLE),
                         .start_val_i(start_address_i),
-                        .end_val_i(start_address_i + count_total_i),
+                        .end_val_i(end_address_i),
                         .count_o(addr_count)
                       );
 
@@ -81,7 +81,7 @@ module aether_engine_generic_mem #(
 
 
   assign data_address = addr_count[24:0];
-  assign task_finished_o = (addr_count == start_address_i + count_total_i) && !busy;
+  assign task_finished_o = (addr_count == end_address_i) && !busy;
 
   assign mem_command = (~busy) ? command_buffer : IDLE;
 
