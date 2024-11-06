@@ -115,7 +115,9 @@ module convolution_layer #(
                        .b_write_en_i(1'b0),
                        .b_addr_i(valid? (conv_counter + 1'd1) : conv_counter),
                        .b_data_i({{2*N}{1'b0}}),
-                       .b_data_o(prev_result)
+                       .b_data_o(prev_result),
+
+                       .assert_on_i
                      );
 
       // Outputs of generated convolvers

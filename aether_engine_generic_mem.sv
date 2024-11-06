@@ -8,7 +8,7 @@ module aether_engine_generic_mem #(
     input logic [15:0] data_write_i,
     output logic [15:0] data_read_o,
     output logic data_read_valid_o,
-    output logic data_write_done_o,
+    output logic data_write_ready_o,
     output logic task_finished_o,
 
     // These ports should be connected directly to the SDRAM chip
@@ -128,7 +128,7 @@ module aether_engine_generic_mem_simp #(
     input logic [15:0] data_write_i,
     output logic [15:0] data_read_o,
     output logic data_read_valid_o,
-    output logic data_write_done_o,
+    output logic data_write_ready_o,
     output logic task_finished_o,
 
     // These ports should be connected directly to the SDRAM chip
@@ -144,21 +144,44 @@ module aether_engine_generic_mem_simp #(
 
     input logic assert_on_i
   );
-
   localparam IDLE = 2'b00;
   localparam WRITE = 2'b01;
   localparam READ = 2'b10;
+
+  logic [1:0] mem_command_mid;
+  logic [1:0] mem_command;
 
   always @(posedge clk_i)
   begin
     if (assert_on_i)
     begin
-      assert (command_i == IDLE || command_i == WRITE || command_i == READ) else
-               $error("command_i must be 0, 1, or 2");
+      assert (mem_command == IDLE || mem_command == WRITE || mem_command == READ) else
+               $error("mem_command must be 0, 1, or 2");
       assert (addr_count < {25{1'b1}}) else
                $error("addr_count must be less than 2^25");
     end
   end
+
+  d_ff #(
+         .Width(2)
+       ) command_buffer (
+         .clk_i,
+         .rst_i(task_finished_o),
+         .en_i(command_i != IDLE),
+         .data_i(command_i),
+         .data_o(mem_command_mid)
+       );
+
+  d_ff #(
+         .Width(2)
+       ) command_buffer_2 (
+         .clk_i,
+         .rst_i(task_finished_o),
+         .en_i(mem_command_mid != IDLE),
+         .data_i(mem_command_mid),
+         .data_o(mem_command)
+       );
+
 
   logic [31:0] addr_count; // Total count
 
@@ -166,8 +189,8 @@ module aether_engine_generic_mem_simp #(
                         .Bits(32)
                       ) addr_counter (
                         .clk_i,
-                        .en_i(1'b1),
-                        .rst_i((command_i != IDLE) || rst_i),
+                        .en_i(mem_command != IDLE),
+                        .rst_i((mem_command == IDLE) || rst_i),
                         .start_val_i(start_address_i),
                         .end_val_i(end_address_i),
                         .count_o(addr_count),
@@ -180,18 +203,36 @@ module aether_engine_generic_mem_simp #(
                      .Depth(2**16 - 1)
                    ) memory_store_inst (
                      .clk_i,
-                     .write_en_i(command_i == WRITE),
+                     .write_en_i(mem_command == WRITE),
                      .addr_i(addr_count[15:0]),
                      .data_i(data_write_i),
                      .data_o(bram_output)
                    );
 
-  assign data_read_o = (command_i == READ)? bram_output : 16'h0000;
+  d_ff #(
+         .Width(1)
+       ) task_finished (
+         .clk_i,
+         .rst_i(),
+         .en_i(1'b1),
+         .data_i(start_address_i == end_address_i),
+         .data_o(task_finished_o)
+       );
+
+  d_ff #(
+         .Width(1)
+       ) data_valid_buffer (
+         .clk_i,
+         .rst_i(),
+         .en_i(1'b1),
+         .data_i(mem_command == READ),
+         .data_o(data_read_valid_o)
+       );
+
+  assign data_read_o = (mem_command == READ)? bram_output : 16'h0000;
+  assign data_write_ready_o = (mem_command == WRITE) || (mem_command_mid == WRITE);
 
   //unused ports
-  assign data_read_valid_o = 1'b0;
-  assign data_write_done_o = 1'b0;
-  assign task_finished_o = 1'b0;
 
   assign sdram_clk_en_o = 1'b0;
   assign sdram_bank_activate_o = 2'b00;

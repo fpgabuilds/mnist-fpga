@@ -59,9 +59,13 @@ module aether_engine #(
   // Load Weights Signals
   logic load_conv_weights;
   logic load_dense_weights;
+  logic ldw_strt;
+  logic ldw_cont;
+  logic lip_strt;
+  logic lip_cont;
+  logic ldw_move;
 
-  logic [31:0] conv_weight_mem_count;
-  logic [31:0] dense_weight_mem_count;
+  logic load_mem_from_buffer;
 
   // Convolution Signals
   logic run_conv;
@@ -76,11 +80,11 @@ module aether_engine #(
   logic [19:0] dns_save_addr;
 
   // Memory Signals
-  logic mem_load_enable;
+  logic [1:0] mem_command;
   logic [15:0] mem_data_read;
 
   logic mem_data_read_valid;
-  logic mem_data_write_done;
+  logic data_write_ready;
   logic mem_task_finished;
 
 
@@ -95,8 +99,8 @@ module aether_engine #(
   IMemup #(.ResetValue(16'h0000)) reg_memup();
   IMstrt #(.ResetValue(16'h0000)) reg_mstrt();
   IMendd #(.ResetValue(16'h0000)) reg_mendd();
-  IBcfg1 #(.ResetValue(16'h0001)) reg_bcfg1();
-  IBcfg2 #(.ResetValue(16'h0000)) reg_bcfg2();
+  IBcfg1 #(.ResetValue({4'b0, ConvEngineCount})) reg_bcfg1();
+  IBcfg2 #(.ResetValue({2'b0, MaxMatrixSize})) reg_bcfg2();
   IBcfg3 #(.ResetValue(16'h0000)) reg_bcfg3();
   ICprm1 #(.ResetValue(16'h0040)) reg_cprm1();
   IStats #(.ResetValue(16'h2240)) reg_stats();
@@ -130,59 +134,73 @@ module aether_engine #(
   // Input Data Buffer
   //------------------------------------------------------------------------------------
 
-  localparam InputBufferBits = MaxMatrixSize**2 * DataWidth;
-  localparam InputBufferWordsOutput = InputBufferBits / DataWidth;
-  localparam AAddrSize = $clog2((InputBufferBits / 16) + 1);
-  localparam BAddrSize = $clog2((InputBufferWordsOutput) + 1);
+  localparam InputBuffer = MaxMatrixSize**2;
+  localparam BuffAddrSize = $clog2(InputBuffer + 1);
 
-  logic [AAddrSize-1:0] input_buffer_addr;
+  logic [BuffAddrSize-1:0] input_buffer_addr;
   logic load_from_input_buffer;
-  logic [BAddrSize-1:0] input_buffer_count;
-  logic [DataWidth-1:0] input_buffer_data;
+  logic [BuffAddrSize-1:0] input_buffer_count;
+  logic [15:0] input_buffer_data;
+
+  assign load_from_input_buffer = 1'b0; // TODO: Implement this
 
   simple_counter #(
-                   .Bits(AAddrSize)
+                   .Bits(BuffAddrSize)
                  ) simple_counter_inst (
                    .clk_i(clk_data_i),
-                   .en_i(instruction_i == LIP && param_1 == LIP_CONT), // Continue load input buffer
-                   .rst_i((instruction_i == LIP && param_1 == LIP_STRT) || rst_full), // Start load input buffer. TODO: do I really want to reset on full?
+                   .en_i(ldw_cont || lip_cont), // Continue load input buffer
+                   .rst_i(ldw_strt || lip_strt || rst_full), // Start load input buffer. TODO: do I really want to reset on full?
                    .count_o(input_buffer_addr)
                  );
 
+  logic [BuffAddrSize-1:0] mem_count_difference;
+  assign mem_count_difference = reg_mendd.mem_end_o - reg_mstrt.mem_start_o;
+
   increment_then_stop #(
-                        .Bits(BAddrSize)
+                        .Bits(BuffAddrSize)
                       ) data_buffer_counter_inst (
                         .clk_i,
-                        .en_i(load_from_input_buffer),
-                        .rst_i(rst_conv),
-                        .start_val_i({BAddrSize{1'b0}}),
-                        .end_val_i(InputBufferWordsOutput[BAddrSize-1:0]),
+                        .en_i(load_from_input_buffer || (load_mem_from_buffer && data_write_ready)),
+                        .rst_i(rst_conv || ldw_strt),
+                        .start_val_i({BuffAddrSize{1'b0}}),
+                        .end_val_i((load_mem_from_buffer)? mem_count_difference : InputBuffer[BuffAddrSize-1:0]),
                         .count_o(input_buffer_count),
                         .assert_on_i
                       );
 
-  dual_port_bram2 #(
-                    .ADataWidth(16),
-                    .BDataWidth(DataWidth),
-                    .BitDepth(InputBufferBits),
-                    .AAddrSize(AAddrSize),
-                    .BAddrSize(BAddrSize)
-                  ) input_buffer_bram (
-                    // Port A
-                    .a_clk_i(clk_data_i),
-                    .a_write_en_i(instruction_i == 4'h7),
-                    .a_addr_i(input_buffer_addr),
-                    .a_data_i(param_2_i),
-                    .a_data_o(),
-                    // Port B
-                    .b_clk_i(clk_i),
-                    .b_write_en_i(1'b0),
-                    .b_addr_i(input_buffer_count),
-                    .b_data_i({DataWidth{1'b0}}),
-                    .b_data_o(input_buffer_data),
+  dual_port_bram #(
+                   .DataWidth(16),
+                   .Depth(InputBuffer)
+                 ) input_buffer_bram (
+                   .clk_i,
+                   // Port A
+                   .a_write_en_i(ldw_cont || lip_cont),
+                   .a_addr_i(input_buffer_addr),
+                   .a_data_i(param_2_i),
+                   .a_data_o(),
+                   // Port B
+                   .b_write_en_i(1'b0), //TODO: Implement this
+                   .b_addr_i(input_buffer_count),
+                   .b_data_i(),
+                   .b_data_o(input_buffer_data),
 
-                    .assert_on_i
-                  );
+                   .assert_on_i
+                 );
+
+  //------------------------------------------------------------------------------------
+  // Weight loading from buffer to ram
+  //------------------------------------------------------------------------------------
+
+  d_ff #(
+         .Width(1)
+       ) load_buf_to_mem_wgts_inst (
+         .clk_i,
+         .rst_i(mem_task_finished),
+         .en_i(ldw_move),
+         .data_i(1'b1),
+         .data_o(load_mem_from_buffer)
+       );
+
 
 
 
@@ -192,11 +210,19 @@ module aether_engine #(
   localparam KernelSize = 3;
   localparam ConvWeightSizeMem = KernelSize * KernelSize * Ratio;
 
-  logic [DataWidth-1:0] conv_kernel_weights_unsigned [ConvEngineCount-1:0][KernelSize*KernelSize-1:0];
-  logic signed [DataWidth-1:0] conv_kernel_weights [ConvEngineCount-1:0][KernelSize*KernelSize-1:0];
+  logic [DataWidth-1:
+         0] conv_kernel_weights_unsigned [ConvEngineCount-1:
+                                          0][KernelSize*KernelSize-1:
+                                             0];
+  logic signed [DataWidth-1:
+                0] conv_kernel_weights [ConvEngineCount-1:
+                                        0][KernelSize*KernelSize-1:
+                                           0];
 
   generate
-    for (genvar i = 0; i < ConvEngineCount; i++)
+    for (genvar i = 0;
+         i < ConvEngineCount;
+         i++)
     begin
       for (genvar j = 0; j < KernelSize*KernelSize; j++)
       begin
@@ -210,7 +236,8 @@ module aether_engine #(
 
   // Load data
   logic conv_weight_no_data;
-  logic [DataWidth-1:0] conv_weight_data;
+  logic [DataWidth-1:
+         0] conv_weight_data;
 
   fifo #(
          .InputWidth(16), // Memory Interface is 16 bits
@@ -228,7 +255,8 @@ module aether_engine #(
        );
 
   localparam ConvEngineCountSize = $clog2(ConvEngineCount + 1);
-  logic [ConvEngineCountSize-1:0] conv_weight_count;
+  logic [ConvEngineCountSize-1:
+         0] conv_weight_count;
 
   counter #(
             .Bits(ConvEngineCountSize)
@@ -245,12 +273,15 @@ module aether_engine #(
 
   genvar i;
   generate
-    for (i = 0; i < ConvEngineCount; i++)
+    for (i = 0;
+         i < ConvEngineCount;
+         i++)
     begin : conv_weight_shift_regs
       shift_reg_with_store #(
                              .N(DataWidth),
                              .Length(KernelSize*KernelSize)
-                           ) conv_weight_shift_reg (
+                           )
+                           conv_weight_shift_reg (
                              .clk_i(clk_i),
                              .en_i(!conv_weight_no_data && conv_weight_count == i),
                              .rst_i(1'b0),
@@ -269,7 +300,8 @@ module aether_engine #(
   //------------------------------------------------------------------------------------
   // Load data
   logic conv_no_data;
-  logic signed [DataWidth-1:0] conv_activation_data;
+  logic signed [DataWidth-1:
+                0] conv_activation_data;
 
   fifo #(
          .InputWidth(16), // Memory Interface is 64 bits
@@ -380,6 +412,9 @@ module aether_engine #(
                           // Load Weights Variables
                           .ldw_cwgt_o(load_conv_weights),
                           .ldw_dwgt_o(load_dense_weights),
+                          .ldw_strt_o(ldw_strt),
+                          .ldw_cont_o(ldw_cont),
+                          .ldw_move_o(ldw_move),
 
                           // Convolution Variables
                           .cnv_run_o(run_conv),
@@ -389,36 +424,35 @@ module aether_engine #(
                           .dns_run_o(run_dense),
                           .dns_save_addr_o(dns_save_addr),
 
+                          // Load Input Data Variables
+                          .lip_strt_o(lip_strt),
+                          .lip_cont_o(lip_cont),
+
                           // Memory Variables
-                          .mem_load_enable_o(mem_load_enable)
+                          .mem_command_o(mem_command)
                         );
 
 
   //------------------------------------------------------------------------------------
   // Memory Interface
   //------------------------------------------------------------------------------------
-  localparam IDLE = 2'b00;
-  localparam WRITE = 2'b01;
-  localparam READ = 2'b10;
 
-  logic [1:0] command;
-  logic [15:0] data_write;
-
-  assign command = mem_load_enable? READ : IDLE;
-  assign data_write = 16'b0; // TODO: Implement this
+  logic [15:
+         0] data_write;
+  assign data_write = input_buffer_data; // TODO: Implement this with a state machine so that only one task can write/read from memory and handle the case when its busy
 
   aether_engine_generic_mem_simp #(
                                    .ClkRate(ClkRate)
                                  ) sys_ram_inst (
                                    .clk_i,
                                    .rst_i(rst_full),
-                                   .command_i(command),
+                                   .command_i(mem_command),
                                    .start_address_i({reg_memup.mem_upper_o, reg_mstrt.mem_start_o}),
                                    .end_address_i({reg_memup.mem_upper_o, reg_mendd.mem_end_o}),
                                    .data_write_i(data_write),
                                    .data_read_o(mem_data_read),
                                    .data_read_valid_o(mem_data_read_valid),
-                                   .data_write_done_o(mem_data_write_done),
+                                   .data_write_ready_o(data_write_ready),
                                    .task_finished_o(mem_task_finished),
 
                                    // These ports should be connected directly to the SDRAM chip

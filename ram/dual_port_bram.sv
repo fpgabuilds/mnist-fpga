@@ -1,7 +1,5 @@
 // TODO: Add test cases
-// TODO: Allow for different port a and port b data widths
 // TODO: Add asserts to check for read/write conflicts
-// TODO: Add asserts to ensure reading withing bounds
 module dual_port_bram #(
     parameter DataWidth = 8,
     parameter Depth = 1024
@@ -16,10 +14,22 @@ module dual_port_bram #(
     input logic b_write_en_i,
     input logic [$clog2(Depth+1)-1:0] b_addr_i,
     input logic [DataWidth-1:0] b_data_i,
-    output logic [DataWidth-1:0] b_data_o
-  );
+    output logic [DataWidth-1:0] b_data_o,
 
-  reg [DataWidth-1:0] memory [0:Depth-1];
+    input logic assert_on_i
+  );
+  always @(posedge clk_i)
+  begin
+    if (assert_on_i)
+    begin
+      assert (a_addr_i <= Depth) else
+               $error("Address A out of bounds");
+      assert (b_addr_i <= Depth) else
+               $error("Address A out of bounds");
+    end
+  end
+
+  logic [DataWidth-1:0] memory [0:Depth-1];
 
   // Port A
   always @(posedge clk_i)
@@ -46,7 +56,6 @@ endmodule
 
 // TODO: Add test cases
 // TODO: Add asserts to check for read/write conflicts
-// TODO: Add asserts to ensure reading withing bounds
 // TODO: Verify this compiles to only a bram
 module dual_port_bram2 #(
     parameter ADataWidth = 8,

@@ -40,6 +40,9 @@ module aether_engine_decoder (
     // Load Weights Variables
     output logic ldw_cwgt_o,
     output logic ldw_dwgt_o,
+    output logic ldw_strt_o,
+    output logic ldw_cont_o,
+    output logic ldw_move_o,
 
     // Convolution Variables
     output logic cnv_run_o,
@@ -49,8 +52,12 @@ module aether_engine_decoder (
     output logic dns_run_o,
     output logic [19:0] dns_save_addr_o,
 
+    // Load Input Data Variables
+    output logic lip_strt_o,
+    output logic lip_cont_o,
+
     // Memory Variables
-    output logic mem_load_enable_o
+    output logic [1:0] mem_command_o
   );
 
 `include "aether_constants.sv";
@@ -228,22 +235,48 @@ module aether_engine_decoder (
   //------------------------------------------------------------------------------------
   // Load Weights Instruction
   //------------------------------------------------------------------------------------
+  logic ldw_mem_read;
+  logic ldw_mem_write;
 
   always_comb
   begin
     ldw_cwgt_o = 1'b0;
     ldw_dwgt_o = 1'b0;
+    ldw_strt_o = 1'b0;
+    ldw_cont_o = 1'b0;
+    ldw_move_o = 1'b0;
+    ldw_mem_read = 1'b0;
+    ldw_mem_write = 1'b0;
 
     if (instruction_i == LDW)
     begin
       case (param_1_i)
         LDW_CWGT:
+        begin
           ldw_cwgt_o = 1'b1;
+          ldw_mem_read = 1'b1;
+        end
         LDW_DWGT:
+        begin
           ldw_dwgt_o = 1'b1;
+          ldw_mem_read = 1'b1;
+        end
+        LDW_STRT:
+        begin
+          ldw_strt_o = 1'b1;
+        end
+        LDW_CONT:
+        begin
+          ldw_cont_o = 1'b1;
+        end
+        LDW_MOVE:
+        begin
+          ldw_mem_write = 1'b1;
+          ldw_move_o = 1'b1;
+        end
         default:
         begin
-          $error("Invalid task command");
+          $error("Invalid task command on LDW");
         end
       endcase
     end
@@ -289,9 +322,45 @@ module aether_engine_decoder (
 
 
   //------------------------------------------------------------------------------------
+  // Load Input Data Instruction
+  //------------------------------------------------------------------------------------
+
+  always_comb
+  begin
+    lip_strt_o = 1'b0;
+    lip_cont_o = 1'b0;
+
+    if (instruction_i == LIP)
+    begin
+      case (param_1_i)
+        LIP_STRT:
+          lip_strt_o = 1'b1;
+        LIP_CONT:
+          lip_cont_o = 1'b1;
+        default:
+        begin
+          $error("Invalid task command on LIP");
+        end
+      endcase
+    end
+  end
+
+
+  //------------------------------------------------------------------------------------
   // Memory Management
   //------------------------------------------------------------------------------------
 
-  assign mem_load_enable_o = (instruction_i == LDW || instruction_i == CNV || instruction_i == DNS);
+  localparam MEM_IDLE = 2'b00;
+  localparam MEM_WRITE = 2'b01;
+  localparam MEM_READ = 2'b10;
 
+  always_comb
+  begin
+    if (ldw_mem_write)
+      mem_command_o = MEM_WRITE;
+    else if (ldw_mem_read || instruction_i == CNV || instruction_i == DNS)
+      mem_command_o = MEM_READ;
+    else
+      mem_command_o = MEM_IDLE;
+  end
 endmodule

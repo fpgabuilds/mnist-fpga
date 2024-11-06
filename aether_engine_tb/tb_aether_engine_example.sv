@@ -50,20 +50,54 @@ module tb_aether_engine_example ();
     assert_on = 1'b0;
 
     execute_cmd({RST, RST_FULL, 16'b0});
-
-    //execute_cmd({WRR, REG_MSTRT, 16'd0});
-    //execute_cmd({WRR, REG_MENDD, 16'd0});
-    execute_cmd({WRR, REG_BCFG1, 16'h4002});
-    execute_cmd({WRR, REG_BCFG2, 16'h0004});
-    //execute_cmd({WRR, REG_BCFG3, 16'd0});
-    execute_cmd({WRR, REG_CPRM1, 16'h0040});
-
-    @(posedge clk);
+    execute_cmd({NOP, 20'h00000});
     assert_on = 1'b1; // I would like the reset to be able to be assert error free
+
+    execute_cmd({WRR, REG_MSTRT, 16'h0000});
+    execute_cmd({WRR, REG_MENDD, 16'h0011});
+    execute_cmd({LDW, LDW_STRT, 16'h0000});
+    execute_cmd({LDW, LDW_CONT, 16'h6261});
+    execute_cmd({LDW, LDW_CONT, 16'h2A63});
+    execute_cmd({LDW, LDW_MOVE, 16'h0000});
+    execute_cmd({LDW, LDW_CONT, 16'h4023});
+    execute_cmd({LDW, LDW_CONT, 16'h797A});
+    execute_cmd({LDW, LDW_CONT, 16'h7078});
+    execute_cmd({LDW, LDW_CONT, 16'h7271});
+    execute_cmd({LDW, LDW_CONT, 16'h232A});
+    execute_cmd({LDW, LDW_CONT, 16'h6D40});
+    execute_cmd({LDW, LDW_CONT, 16'h6B6C});
+    execute_cmd({LDW, LDW_CONT, 16'h6577});
+    execute_cmd({LDW, LDW_CONT, 16'h2A72});
+    execute_cmd({LDW, LDW_CONT, 16'h4023});
+    execute_cmd({LDW, LDW_CONT, 16'h6A6E});
+    execute_cmd({LDW, LDW_CONT, 16'h7569});
+    execute_cmd({LDW, LDW_CONT, 16'h7776});
+    execute_cmd({LDW, LDW_CONT, 16'h232A});
+    execute_cmd({LDW, LDW_CONT, 16'h7440});
+    execute_cmd({LDW, LDW_CONT, 16'h7273});
+    execute_cmd({LIP, LIP_STRT, 16'h0000});
+    execute_cmd({LIP, LIP_CONT, 16'hFFFF});
+    execute_cmd({LIP, LIP_CONT, 16'hFFFF});
+    execute_cmd({LIP, LIP_CONT, 16'hFFFF});
+    execute_cmd({LIP, LIP_CONT, 16'hFFFF});
+    execute_cmd({LIP, LIP_CONT, 16'hFFFF});
+    execute_cmd({LIP, LIP_CONT, 16'hFFFF});
+    execute_cmd({LIP, LIP_CONT, 16'hFFFF});
+    execute_cmd({LIP, LIP_CONT, 16'hFFFF});
+    execute_cmd({LIP, LIP_CONT, 16'hFFFF});
+    execute_cmd({LIP, LIP_CONT, 16'hFFFF});
+    execute_cmd({LIP, LIP_CONT, 16'hFFFF});
+    execute_cmd({LIP, LIP_CONT, 16'hFFFF});
+    execute_cmd({LIP, LIP_CONT, 16'hFFFF});
+    execute_cmd({LIP, LIP_CONT, 16'hFFFF});
+
+
 
     // Load Weights
     //execute_cmd({WRR, REG_MSTRT, 16'd0});
     //execute_cmd({WRR, REG_MENDD, 16'd0});
+    $error("Nothing Else Implemented");
+    $stop;
     execute_cmd({LDW, LDW_CWGT, 16'hXXXX}); // Make this similar to the load input data with a start and cont
     //...
     execute_cmd({LDW, LDW_CWGT, 16'hXXXX}); // Actually moves from memory to the hardware
