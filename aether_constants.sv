@@ -60,3 +60,8 @@ localparam [3:0] REG_STATS = 4'h9;
 // localparam [3:0] REG_ = 4'hE;
 // localparam [3:0] REG_ = 4'hF;
 
+
+
+localparam [1:0] REG_BCFG3_LDFM_IDB = 2'h0;
+localparam [1:0] REG_BCFG3_LDFM_MEM = 2'h1;
+localparam [1:0] REG_BCFG3_LDFM_COP = 2'h2;

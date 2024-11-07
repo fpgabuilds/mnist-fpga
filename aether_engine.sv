@@ -74,6 +74,9 @@ module aether_engine #(
   logic signed [DataWidth-1:0] conv_data [ConvEngineCount-1:0];
   logic conv_valid;
   logic conv_done;
+  assign interrupt_o = conv_done;
+
+  logic conv_need_data;
 
   // Dense Signals
   logic run_dense;
@@ -139,7 +142,7 @@ module aether_engine #(
   logic [BuffAddrSize-1:0] input_buffer_count;
   logic [15:0] input_buffer_data;
 
-  assign load_from_input_buffer = 1'b0; // TODO: Implement this
+  assign load_from_input_buffer = reg_bcfg3.load_from_o == REG_BCFG3_LDFM_IDB; // TODO: Implement this
 
   simple_counter #(
                    .Bits(BuffAddrSize)
@@ -157,7 +160,7 @@ module aether_engine #(
                         .Bits(BuffAddrSize)
                       ) data_buffer_counter_inst (
                         .clk_i,
-                        .en_i(load_from_input_buffer || (load_mem_from_buffer && data_write_ready)),
+                        .en_i((load_from_input_buffer && conv_need_data) || (load_mem_from_buffer && data_write_ready)),
                         .rst_i(rst_conv || ldw_strt),
                         .start_val_i({BuffAddrSize{1'b0}}),
                         .end_val_i((load_mem_from_buffer)? mem_count_difference : InputBuffer[BuffAddrSize-1:0]),
@@ -236,7 +239,8 @@ module aether_engine #(
   generate
     for (genvar i = 0; i < ConvWeightSizeMem; i++)
     begin : gen_raw_store
-      assign raw_store[16*i +: 16] = weight_shift_store[i];
+      assign raw_store[16*i +: 16]
+             = weight_shift_store[i];
     end
   endgenerate
 
@@ -258,23 +262,39 @@ module aether_engine #(
   //------------------------------------------------------------------------------------
   // Load data
   logic conv_no_data;
-  logic signed [DataWidth-1:
-                0] conv_activation_data;
+  logic signed [DataWidth-1:0] conv_activation_data;
 
-  fifo #(
-         .InputWidth(16), // Memory Interface is 64 bits
-         .OutputWidth(DataWidth),
-         .Depth(4) // Can store 4 words
-       ) conv_fifo (
+  logic signed [7:0] data_a;
+  logic signed [7:0] data_b;
+  logic data_number;
+
+  logic conv_running;
+
+  d_ff #(
+         .Width(1)
+       ) conv_running_inst (
          .clk_i,
-         .rst_i(rst_conv),
-         .write_en_i(run_conv && mem_data_read_valid),
-         .read_en_i(1'b1),
-         .data_i(mem_data_read),
-         .data_o(conv_activation_data),
-         .full_o(),
-         .empty_o(conv_no_data)
+         .rst_i(conv_done | rst_conv),
+         .en_i(run_conv),
+         .data_i(1'b1),
+         .data_o(conv_running)
        );
+
+  assign conv_no_data = !conv_running;
+
+  simple_counter #(
+                   .Bits(1)
+                 ) simple_counter_inst_a (
+                   .clk_i(clk_i),
+                   .en_i(conv_running),
+                   .rst_i(rst_conv),
+                   .count_o(data_number)
+                 );
+
+  assign data_a = $signed(input_buffer_data[7:0]);
+  assign data_b = $signed(input_buffer_data[15:8]);
+  assign conv_activation_data = (data_number)? data_a : data_b;
+  assign conv_need_data = data_number;
 
   convolution_layer #(
                       .MaxMatrixSize(MaxMatrixSize),
@@ -303,6 +323,23 @@ module aether_engine #(
 
                       .assert_on_i(assert_on_i)
                     );
+
+
+  // fifo #(
+  //        .InputWidth(16), // Memory Interface is 64 bits
+  //        .OutputWidth(DataWidth),
+  //        .Depth(4) // Can store 4 words
+  //      ) conv_fifo (
+  //        .clk_i,
+  //        .rst_i(rst_conv),
+  //        .write_en_i(run_conv && mem_data_read_valid),
+  //        .read_en_i(1'b1),
+  //        .data_i(mem_data_read),
+  //        .data_o(conv_activation_data),
+  //        .full_o(),
+  //        .empty_o(conv_no_data)
+  //      );
+
 
   ///--------------------------------------------------------------------------------------------
   // Dense Layer

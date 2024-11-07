@@ -145,7 +145,7 @@ module convolution_layer #(
          .Width(1)
        ) conv_valid_delay_inst (
          .clk_i,
-         .rst_i(1'b0),
+         .rst_i,
          .en_i,
          .data_i((reg_cprm1_i.save_to_ram_o || reg_cprm1_i.save_to_buffer_o) ? conv_valid : 1'b0),
          .data_o(conv_valid_o)
@@ -155,7 +155,7 @@ module convolution_layer #(
          .Width(1)
        ) conv_done_delay_inst (
          .clk_i,
-         .rst_i(1'b0),
+         .rst_i,
          .en_i,
          .data_i(conv_done == {EngineCount{1'b1}}),
          .data_o(conv_done_o)
