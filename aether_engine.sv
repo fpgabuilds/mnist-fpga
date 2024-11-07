@@ -87,9 +87,6 @@ module aether_engine #(
   logic data_write_ready;
   logic mem_task_finished;
 
-
-  localparam real Ratio = DataWidth / 16;
-
   //------------------------------------------------------------------------------------
   // Register Interfaces
   //------------------------------------------------------------------------------------
@@ -195,101 +192,62 @@ module aether_engine #(
          .Width(1)
        ) load_buf_to_mem_wgts_inst (
          .clk_i,
-         .rst_i(mem_task_finished),
+         .rst_i(mem_task_finished || rst_full),
          .en_i(ldw_move),
          .data_i(1'b1),
          .data_o(load_mem_from_buffer)
        );
 
-
-
-
   //------------------------------------------------------------------------------------
   // Convolution Weight Module
   //------------------------------------------------------------------------------------
   localparam KernelSize = 3;
-  localparam ConvWeightSizeMem = KernelSize * KernelSize * Ratio;
+  localparam ConvWeightSizeMem = (KernelSize**2 * ConvEngineCount) / 2 + (KernelSize**2 * ConvEngineCount) % 2; // 2 weights per memory location, round up
 
-  logic [DataWidth-1:
-         0] conv_kernel_weights_unsigned [ConvEngineCount-1:
-                                          0][KernelSize*KernelSize-1:
-                                             0];
-  logic signed [DataWidth-1:
-                0] conv_kernel_weights [ConvEngineCount-1:
-                                        0][KernelSize*KernelSize-1:
-                                           0];
+  logic signed [DataWidth-1:0] conv_kernel_weights [ConvEngineCount-1:0][KernelSize*KernelSize-1:0];
+
+  logic load_conv_weights_longterm;
+  logic [15:0] weight_shift_store [ConvWeightSizeMem-1:0];
+  logic [(ConvWeightSizeMem * 16)-1:0] raw_store;
+
+  d_ff #(
+         .Width(1)
+       ) load_wgts_to_mem_inst (
+         .clk_i,
+         .rst_i(mem_task_finished),
+         .en_i(load_conv_weights),
+         .data_i(1'b1),
+         .data_o(load_conv_weights_longterm)
+       );
+
+  shift_reg_with_store #(
+                         .N(16), // Width of the data
+                         .Length(ConvWeightSizeMem) // Number of registers
+                       ) conv_weight_mem_shift_inst (
+                         .clk_i, // clock
+                         .en_i(mem_data_read_valid && load_conv_weights_longterm), // enable shift
+                         .rst_i(rst_conv_weight), // is this needed
+                         .rst_val_i(16'b0), //reset value (Every register will be initialized with this value)
+                         .data_i(mem_data_read), //data in
+                         .data_o(), //data out
+                         .store_o(weight_shift_store) //the register that holds the data
+                       );
 
   generate
-    for (genvar i = 0;
-         i < ConvEngineCount;
-         i++)
-    begin
-      for (genvar j = 0; j < KernelSize*KernelSize; j++)
-      begin
-        assign conv_kernel_weights[i][j] = $signed(conv_kernel_weights_unsigned[i][j]);
-      end
+    for (genvar i = 0; i < ConvWeightSizeMem; i++)
+    begin : gen_raw_store
+      assign raw_store[16*i +: 16] = weight_shift_store[i];
     end
   endgenerate
 
-  assign conv_weight_mem_count = reg_bcfg1.engine_count_o * ConvWeightSizeMem; // TODO: seems like a 4 dsp to preform this, fix later
 
-
-  // Load data
-  logic conv_weight_no_data;
-  logic [DataWidth-1:
-         0] conv_weight_data;
-
-  fifo #(
-         .InputWidth(16), // Memory Interface is 16 bits
-         .OutputWidth(DataWidth),
-         .Depth(4) // Can store 4 words
-       ) conv_weight_fifo (
-         .clk_i,
-         .rst_i(rst_conv_weight),
-         .write_en_i(load_conv_weights && mem_data_read_valid),
-         .read_en_i(1'b1),
-         .data_i(mem_data_read),
-         .data_o(conv_weight_data),
-         .full_o(),
-         .empty_o(conv_weight_no_data)
-       );
-
-  localparam ConvEngineCountSize = $clog2(ConvEngineCount + 1);
-  logic [ConvEngineCountSize-1:
-         0] conv_weight_count;
-
-  counter #(
-            .Bits(ConvEngineCountSize)
-          ) conv_engine_weight_count_inst (
-            .clk_i,
-            .en_i(1'b1),
-            .rst_i(rst_conv_weight),
-            .start_val_i({ConvEngineCountSize{1'b0}}),
-            .end_val_i(ConvEngineCount[ConvEngineCountSize-1:0]),
-            .count_by_i({{{ConvEngineCountSize-1}{1'b0}}, {1'b1}}),
-            .count_o(conv_weight_count),
-            .assert_on_i
-          );
-
-  genvar i;
   generate
-    for (i = 0;
-         i < ConvEngineCount;
-         i++)
-    begin : conv_weight_shift_regs
-      shift_reg_with_store #(
-                             .N(DataWidth),
-                             .Length(KernelSize*KernelSize)
-                           )
-                           conv_weight_shift_reg (
-                             .clk_i(clk_i),
-                             .en_i(!conv_weight_no_data && conv_weight_count == i),
-                             .rst_i(1'b0),
-                             .rst_val_i({DataWidth{1'b0}}),  // Reset to 0, adjust if needed
-                             .data_i(conv_weight_data),
-                             .data_o(),
-                             .store_o(conv_kernel_weights_unsigned[i])
-                           );
+    for (genvar i = 0; i < ConvEngineCount; i++)
+    begin : weight_conversion
+      for (genvar j = 0; j < KernelSize*KernelSize; j++)
+      begin : kernel_mapping
+        assign conv_kernel_weights[i][j] = $signed(raw_store[(i * KernelSize * KernelSize + j) * DataWidth +: DataWidth]);
+      end
     end
   endgenerate
 

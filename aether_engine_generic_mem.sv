@@ -155,7 +155,7 @@ module aether_engine_generic_mem_simp #(
   begin
     if (assert_on_i)
     begin
-      assert (mem_command == IDLE || mem_command == WRITE || mem_command == READ) else
+      assert (command_i == IDLE || command_i == WRITE || command_i == READ) else
                $error("mem_command must be 0, 1, or 2");
       assert (addr_count < {25{1'b1}}) else
                $error("addr_count must be less than 2^25");
@@ -166,7 +166,7 @@ module aether_engine_generic_mem_simp #(
          .Width(2)
        ) command_buffer (
          .clk_i,
-         .rst_i(task_finished_o),
+         .rst_i(task_finished_o || rst_i),
          .en_i(command_i != IDLE),
          .data_i(command_i),
          .data_o(mem_command_mid)
@@ -176,7 +176,7 @@ module aether_engine_generic_mem_simp #(
          .Width(2)
        ) command_buffer_2 (
          .clk_i,
-         .rst_i(task_finished_o),
+         .rst_i(task_finished_o || rst_i),
          .en_i(mem_command_mid != IDLE),
          .data_i(mem_command_mid),
          .data_o(mem_command)
@@ -209,13 +209,24 @@ module aether_engine_generic_mem_simp #(
                      .data_o(bram_output)
                    );
 
+  logic task_finished_mid;
   d_ff #(
          .Width(1)
-       ) task_finished (
+       ) task_finished_middle_inst (
+         .clk_i,
+         .rst_i(task_finished_o),
+         .en_i(1'b1),
+         .data_i(addr_count == end_address_i),
+         .data_o(task_finished_mid)
+       );
+
+  d_ff #(
+         .Width(1)
+       ) task_finished_inst (
          .clk_i,
          .rst_i(),
          .en_i(1'b1),
-         .data_i(start_address_i == end_address_i),
+         .data_i(task_finished_mid),
          .data_o(task_finished_o)
        );
 
@@ -223,7 +234,7 @@ module aether_engine_generic_mem_simp #(
          .Width(1)
        ) data_valid_buffer (
          .clk_i,
-         .rst_i(),
+         .rst_i(task_finished_o),
          .en_i(1'b1),
          .data_i(mem_command == READ),
          .data_o(data_read_valid_o)
