@@ -33,9 +33,9 @@ module convolution_layer #(
   begin
     if (assert_on_i)
     begin
-      assert(reg_bcfg1.engine_count_o <= EngineCount) else
+      assert(reg_bcfg1_i.engine_count_o <= EngineCount) else
               $error("Requested EngineCount is greater than the instantiated EngineCount");
-      assert(reg_bcfg1.engine_count_o > 0) else
+      assert(reg_bcfg1_i.engine_count_o > 0) else
               $error("Requested EngineCount must be greater than 0");
       assert(reg_bcfg2_i.matrix_size_o + 2 * reg_cprm1_i.padding_o <= MaxMatrixSize) else
               $error("Requested MatrixSize + padding is greater than the instantiated MaxMatrixSize");
@@ -86,7 +86,7 @@ module convolution_layer #(
                 ) conv_inst (
                   .clk_i,
                   .rst_i,
-                  .en_i((i < reg_bcfg1.engine_count_o) ? en_i : 1'b0),
+                  .en_i((i < reg_bcfg1_i.engine_count_o) ? en_i : 1'b0),
                   .data_i(activation_data_i),
                   .stride_i(reg_cprm1_i.stride_o),
                   .matrix_size_i(reg_bcfg2_i.matrix_size_o),
@@ -124,8 +124,8 @@ module convolution_layer #(
       if (i == 0)
         assign conv_valid = valid;
 
-      assign conv_done[i] = (i < reg_bcfg1.engine_count_o) ? done : 1'b1;
-      assign data_conv[i] = (i < reg_bcfg1.engine_count_o && (reg_cprm1_i.save_to_ram_o || reg_cprm1_i.save_to_buffer_o) && valid) ? sum_output : {N{1'b0}};
+      assign conv_done[i] = (i < reg_bcfg1_i.engine_count_o) ? done : 1'b1;
+      assign data_conv[i] = (i < reg_bcfg1_i.engine_count_o && (reg_cprm1_i.save_to_ram_o || reg_cprm1_i.save_to_buffer_o) && valid) ? sum_output : {N{1'b0}};
     end
   endgenerate
 

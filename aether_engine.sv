@@ -2,11 +2,11 @@ module aether_engine #(
     parameter DataWidth = 8,
 
     // Convolution Configuration
-    parameter [13:0] MaxMatrixSize = 16383, // maximum matrix size that this convolver can convolve
-    parameter [9:0] ConvEngineCount = 1023, // Amount of instantiated convolvers // TODO: add this to an info register and create errors
+    parameter [13:0] MaxMatrixSize = 224, // 16383 maximum matrix size that this convolver can convolve
+    parameter [9:0] ConvEngineCount = 1, // 1023 Amount of instantiated convolvers // TODO: add this to an info register and create errors
 
     // Dense Configuration
-    parameter DenseEngineCount = 1024, // Amount of instantiated dense layers // TODO: add this to an info register and create errors
+    parameter DenseEngineCount = 8, // Amount of instantiated dense layers // TODO: add this to an info register and create errors
 
     // Memory Configuration
     parameter ClkRate = 143_000_000
@@ -36,10 +36,12 @@ module aether_engine #(
     inout wire [15:0] sdram_dq_io,
 
     //Debugging
-    input logic assert_on_i
+    input logic assert_on_i,
+    output logic signed[15:0] conv_data_o, // Needed for quartis simulation for now to compile and give accurate results
+    output logic signed [15:0] dense_out_o
   );
 
-`include "aether_constants.sv";
+`include "aether_constants.sv"
 
   //------------------------------------------------------------------------------------
   // Variable Definitions
@@ -74,13 +76,13 @@ module aether_engine #(
   logic signed [DataWidth-1:0] conv_data [ConvEngineCount-1:0];
   logic conv_valid;
   logic conv_done;
-  assign interrupt_o = conv_done;
 
   logic conv_need_data;
 
   // Dense Signals
   logic run_dense;
   logic [19:0] dns_save_addr;
+  logic signed [15:0] dense_out [DenseEngineCount-1:0];
 
   // Memory Signals
   logic [1:0] mem_command;
@@ -89,6 +91,34 @@ module aether_engine #(
   logic mem_data_read_valid;
   logic data_write_ready;
   logic mem_task_finished;
+
+
+  //------------------------------------------------------------------------------------
+  // Debug stuff
+  //------------------------------------------------------------------------------------
+
+  logic signed [15:0] conv_data_temp;
+  always_comb
+  begin
+    conv_data_temp = conv_data[0];
+    for (int i = 1; i < ConvEngineCount; i++)
+    begin
+      conv_data_temp = conv_data_temp ^ conv_data[i];
+    end
+    conv_data_o = conv_data_temp;
+  end
+
+  // For dense_out
+  logic signed [15:0] dense_out_temp;
+  always_comb
+  begin
+    dense_out_temp = dense_out[0];
+    for (int i = 1; i < DenseEngineCount; i++)
+    begin
+      dense_out_temp = dense_out_temp ^ dense_out[i];
+    end
+    dense_out_o = dense_out_temp;
+  end
 
   //------------------------------------------------------------------------------------
   // Register Interfaces
@@ -103,7 +133,7 @@ module aether_engine #(
   IBcfg2 #(.ResetValue({2'b0, MaxMatrixSize})) reg_bcfg2();
   IBcfg3 #(.ResetValue(16'h0000)) reg_bcfg3();
   ICprm1 #(.ResetValue(16'h0040)) reg_cprm1();
-  IStats #(.ResetValue(16'h2240)) reg_stats();
+  IStats #(.ResetValue(16'h0000)) reg_stats();
 
   assign reg_memup.clk_i = clk_i;
   assign reg_memup.rst_i = rst_regs;
@@ -128,6 +158,10 @@ module aether_engine #(
 
   assign reg_stats.clk_i = clk_i;
   assign reg_stats.rst_i = rst_regs;
+
+  assign reg_stats.we_int_i = 1'b1;
+  assign reg_stats.error_active_i = 1'b0; // TODO: Implement this
+  assign interrupt_o = reg_stats.interrupt_o;
 
 
   //------------------------------------------------------------------------------------
@@ -236,19 +270,20 @@ module aether_engine #(
                          .store_o(weight_shift_store) //the register that holds the data
                        );
 
+  genvar i;
+  genvar j;
   generate
-    for (genvar i = 0; i < ConvWeightSizeMem; i++)
+    for (i = 0; i < ConvWeightSizeMem; i++)
     begin : gen_raw_store
-      assign raw_store[16*i +: 16]
-             = weight_shift_store[i];
+      assign raw_store[16*i +: 16] = weight_shift_store[i];
     end
   endgenerate
 
 
   generate
-    for (genvar i = 0; i < ConvEngineCount; i++)
+    for (i = 0; i < ConvEngineCount; i++)
     begin : weight_conversion
-      for (genvar j = 0; j < KernelSize*KernelSize; j++)
+      for (j = 0; j < KernelSize*KernelSize; j++)
       begin : kernel_mapping
         assign conv_kernel_weights[i][j] = $signed(raw_store[(i * KernelSize * KernelSize + j) * DataWidth +: DataWidth]);
       end
@@ -269,6 +304,9 @@ module aether_engine #(
   logic data_number;
 
   logic conv_running;
+
+  assign reg_stats.conv_done_i = conv_done;
+  assign reg_stats.conv_running_i = conv_running;
 
   d_ff #(
          .Width(1)
@@ -345,15 +383,35 @@ module aether_engine #(
   // Dense Layer
   //--------------------------------------------------------------------------------------------
 
+  logic signed [DataWidth-1:0] data_array [DenseEngineCount-1:0];
+
+  generate
+    for (i = 0; i < DenseEngineCount; i++)
+    begin : gen_data
+      assign data_array[i] = mem_data_read + i; // i is automatically cast to 16-bit signed
+    end
+  endgenerate
+
+
+  logic signed [DataWidth-1:0] weight_array [DenseEngineCount-1:0];
+
+  generate
+    for (i = 0; i < DenseEngineCount; i++)
+    begin : gen_data2
+      assign weight_array[i] = input_buffer_data + i; // i is automatically cast to 16-bit signed
+    end
+  endgenerate
+
+
   dense_layer #(
-                .N(16),
-                .EngineCount(1024)
+                .N(DataWidth),
+                .EngineCount(DenseEngineCount)
               ) dense_inst (
                 .clk_i,
-                .en_i(),
-                .value_i(),
-                .weight_i(),
-                .dense_o(),
+                .en_i(1'b1),
+                .value_i(data_array),
+                .weight_i(weight_array),
+                .dense_o(dense_out),
 
                 // Configuration Registers
                 .reg_bcfg1_i(reg_bcfg1.read),
@@ -362,6 +420,8 @@ module aether_engine #(
                 .reg_cprm1_i(reg_cprm1.read)
               );
 
+  assign reg_stats.dense_done_i = 1'b0;
+  assign reg_stats.dense_running_i = 1'b0;
 
   //------------------------------------------------------------------------------------
   // Instruction Decoder Module
@@ -432,9 +492,11 @@ module aether_engine #(
   // Memory Interface
   //------------------------------------------------------------------------------------
 
-  logic [15:
-         0] data_write;
+  logic [15:0] data_write;
   assign data_write = input_buffer_data; // TODO: Implement this with a state machine so that only one task can write/read from memory and handle the case when its busy
+
+  assign reg_stats.memory_done_i = mem_task_finished;
+  assign reg_stats.memory_running_i = !mem_task_finished;
 
   aether_engine_generic_mem_simp #(
                                    .ClkRate(ClkRate)

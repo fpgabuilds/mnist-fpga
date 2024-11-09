@@ -29,7 +29,7 @@ module dense_layer #(
                     .N(N)
                   ) dense_mac_inst (
                     .clk_i,
-                    .en_i((i < reg_bcfg1.engine_count_o) ? en_i : 1'b0),
+                    .en_i((i < reg_bcfg1_i.engine_count_o) ? en_i : 1'b0),
                     .value_i(value_i[i]),
                     .mult_i(weight_i[i]),
                     .add_i(reg_cprm1_i.accumulate_o? dense_output : {{2*N}{1'b0}}),

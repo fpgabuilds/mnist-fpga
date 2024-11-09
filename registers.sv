@@ -10,8 +10,8 @@ interface IVersn #(
   logic [4:0] major_o;
   logic [2:0] minor_o;
 
-  modport read (output chip_id_o, major_o, minor_o);
-  modport read_full (output register_o);
+  modport read (input chip_id_o, major_o, minor_o);
+  modport read_full (input register_o);
 
   assign register_o = ResetValue;
 
@@ -31,8 +31,8 @@ interface IHwrid #(
 
   logic [15:0] uid_o;
 
-  modport read (output uid_o);
-  modport read_full (output register_o);
+  modport read (input uid_o);
+  modport read_full (input register_o);
 
   assign register_o = ResetValue;
 
@@ -54,10 +54,10 @@ interface IMemup #(
 
   logic [15:0] mem_upper_o;
 
-  modport read (output mem_upper_o);
-  modport read_full (output register_o);
-  modport write_ext (input register_i, we_i);
-  modport reg_ctrl (input clk_i, rst_i);
+  modport read (input mem_upper_o);
+  modport read_full (input register_o);
+  modport write_ext (output register_i, we_i);
+  modport reg_ctrl (output clk_i, rst_i);
 
   always_ff @(posedge clk_i or posedge rst_i)
   begin
@@ -89,10 +89,10 @@ interface IMstrt #(
 
   logic [15:0] mem_start_o;
 
-  modport read (output mem_start_o);
-  modport read_full (output register_o);
-  modport write_ext (input register_i, we_i);
-  modport reg_ctrl (input clk_i, rst_i);
+  modport read (input mem_start_o);
+  modport read_full (input register_o);
+  modport write_ext (output register_i, we_i);
+  modport reg_ctrl (output clk_i, rst_i);
 
   always_ff @(posedge clk_i or posedge rst_i)
   begin
@@ -124,10 +124,10 @@ interface IMendd #(
 
   logic [15:0] mem_end_o;
 
-  modport read (output mem_end_o);
-  modport read_full (output register_o);
-  modport write_ext (input register_i, we_i);
-  modport reg_ctrl (input clk_i, rst_i);
+  modport read (input mem_end_o);
+  modport read_full (input register_o);
+  modport write_ext (output register_i, we_i);
+  modport reg_ctrl (output clk_i, rst_i);
 
   always_ff @(posedge clk_i or posedge rst_i)
   begin
@@ -160,10 +160,10 @@ interface IBcfg1 #(
   logic [3:0] shift_low_o;
   logic [11:0] engine_count_o;
 
-  modport read (output shift_low_o, engine_count_o);
-  modport read_full (output register_o);
-  modport write_ext (input register_i, we_i);
-  modport reg_ctrl (input clk_i, rst_i);
+  modport read (input shift_low_o, engine_count_o);
+  modport read_full (input register_o);
+  modport write_ext (output register_i, we_i);
+  modport reg_ctrl (output clk_i, rst_i);
 
   always_ff @(posedge clk_i or posedge rst_i)
   begin
@@ -197,10 +197,10 @@ interface IBcfg2 #(
   logic [1:0] shift_high_o;
   logic [13:0] matrix_size_o;
 
-  modport read (output shift_high_o, matrix_size_o);
-  modport read_full (output register_o);
-  modport write_ext (input register_i, we_i);
-  modport reg_ctrl (input clk_i, rst_i);
+  modport read (input shift_high_o, matrix_size_o);
+  modport read_full (input register_o);
+  modport write_ext (output register_i, we_i);
+  modport reg_ctrl (output clk_i, rst_i);
 
   always_ff @(posedge clk_i or posedge rst_i)
   begin
@@ -234,10 +234,10 @@ interface IBcfg3 #(
   logic [15:14] load_from_o;
   logic [13:8] shift_final_o;
 
-  modport read (output load_from_o, shift_final_o);
-  modport read_full (output register_o);
-  modport write_ext (input register_i, we_i);
-  modport reg_ctrl (input clk_i, rst_i);
+  modport read (input load_from_o, shift_final_o);
+  modport read_full (input register_o);
+  modport write_ext (output register_i, we_i);
+  modport reg_ctrl (output clk_i, rst_i);
 
   assign register_o[7:0] = ResetValue[7:0];
 
@@ -278,10 +278,10 @@ interface ICprm1 #(
   logic save_to_ram_o;
   logic save_to_buffer_o;
 
-  modport read (output padding_o, padding_fill_o, stride_o, activation_function_o, accumulate_o, save_to_ram_o, save_to_buffer_o);
-  modport read_full (output register_o);
-  modport write_ext (input register_i, we_i);
-  modport reg_ctrl (input clk_i, rst_i);
+  modport read (input padding_o, padding_fill_o, stride_o, activation_function_o, accumulate_o, save_to_ram_o, save_to_buffer_o);
+  modport read_full (input register_o);
+  modport write_ext (output register_i, we_i);
+  modport reg_ctrl (output clk_i, rst_i);
 
   always_ff @(posedge clk_i or posedge rst_i)
   begin
@@ -317,50 +317,53 @@ interface IStats #(
   logic [15:0] register_i;
   logic we_i;
   logic we_int_i;
-  logic we_int2_i;
+  logic read_full_i;
 
   logic conv_done_i;
   logic conv_running_i;
   logic dense_done_i;
   logic dense_running_i;
-  logic [4:0] error_code_i;
-
-  logic conv_intrr_ac_i;
-  logic dense_intrr_ac_i;
-  logic error_intrr_ac_i;
+  logic memory_done_i;
+  logic memory_running_i;
+  logic error_active_i;
 
   logic [15:0] register_o;
 
-  logic conv_done_o;
+  logic error_interrupt_en_o;
+  logic conv_interrupt_en_o;
+  logic dense_interrupt_en_o;
+  logic memory_interrupt_en_o;
+
   logic conv_running_o;
-  logic conv_intrr_en_o;
-  logic conv_intrr_ac_o;
-  logic dense_done_o;
   logic dense_running_o;
-  logic dense_intrr_en_o;
-  logic dense_intrr_ac_o;
-  logic error_intrr_ac_o;
-  logic error_intrr_en_o;
-  logic [4:0] error_code_o;
+  logic memory_running_o;
 
-  modport read (output conv_done_o, conv_running_o, conv_intrr_en_o, dense_done_o, dense_running_o, dense_intrr_en_o, error_intrr_en_o, error_code_o);
-  modport read_full (output register_o);
-  modport write_int (input conv_done_i, conv_running_i, dense_done_i, dense_running_i, error_code_i, we_int_i);
-  modport write_int2 (input conv_intrr_ac_i, dense_intrr_ac_i, error_intrr_ac_i, we_int2_i);
-  modport write_ext (input register_i, we_i);
-  modport reg_ctrl (input clk_i, rst_i);
+  logic error_active_o;
+  logic conv_active_o;
+  logic dense_active_o;
+  logic memory_active_o;
 
-  assign register_o[5] = ResetValue[5];
+  logic interrupt_o;
+
+
+  modport read (input error_interrupt_en_o, conv_interrupt_en_o, dense_interrupt_en_o, memory_interrupt_en_o, conv_running_o, dense_running_o, memory_running_o, error_active_o, conv_active_o, dense_active_o, interrupt_o);
+  modport read_full (input register_o, output read_full_i);
+  modport write_int (output conv_done_i, conv_running_i, dense_done_i, dense_running_i, memory_done_i, memory_running_i, error_active_i, we_int_i);
+  modport write_ext (output register_i, we_i);
+  modport reg_ctrl (output clk_i, rst_i);
+
+  assign register_o[15:12] = ResetValue[15:12];
+  assign register_o[7] = ResetValue[7];
 
   always_ff @(posedge clk_i or posedge rst_i)
   begin
     if (rst_i)
     begin
-      {conv_done_o, conv_running_o, dense_done_o, dense_running_o, error_code_o} <= {ResetValue[15], ResetValue[14], ResetValue[11], ResetValue[10], ResetValue[4:0]};
+      {conv_running_o, dense_running_o, memory_running_o} <= ResetValue[6:4];
     end
     else if (we_int_i)
     begin
-      {conv_done_o, conv_running_o, dense_done_o, dense_running_o, error_code_o} <= {conv_done_i, conv_running_i, dense_done_i, dense_running_i, error_code_i};
+      {conv_running_o, dense_running_o, memory_running_o} <= {conv_done_i, dense_done_i, memory_done_i};
     end
   end
 
@@ -369,11 +372,29 @@ interface IStats #(
   begin
     if (rst_i)
     begin
-      {conv_intrr_ac_o, dense_intrr_ac_o, error_intrr_ac_o} <= {ResetValue[12], ResetValue[8], ResetValue[7]};
+      {error_active_o, conv_active_o, dense_active_o, memory_active_o} <= ResetValue[3:0];
     end
-    else if (we_int2_i)
+    else if (we_int_i)
     begin
-      {conv_intrr_ac_o, dense_intrr_ac_o, error_intrr_ac_o} <= {conv_intrr_ac_i, dense_intrr_ac_i, error_intrr_ac_i};
+      if (!error_interrupt_en_o || read_full_i)
+        error_active_o <= error_active_i;
+      else if (error_active_i)
+        error_active_o <= 1'b1; // Only set and not reset when interrupt is enabled
+
+      if (!conv_interrupt_en_o || read_full_i)
+        conv_active_o <= conv_running_i;
+      else if (conv_running_i)
+        conv_active_o <= 1'b1; // Only set and not reset when interrupt is enabled
+
+      if (!dense_interrupt_en_o || read_full_i)
+        dense_active_o <= dense_running_i;
+      else if (dense_running_i)
+        dense_active_o <= 1'b1; // Only set and not reset when interrupt is enabled
+
+      if (!memory_interrupt_en_o || read_full_i)
+        memory_active_o <= memory_running_i;
+      else if (memory_running_i)
+        memory_active_o <= 1'b1; // Only set and not reset when interrupt is enabled
     end
   end
 
@@ -381,25 +402,28 @@ interface IStats #(
   begin
     if (rst_i)
     begin
-      {conv_intrr_en_o, dense_intrr_en_o, error_intrr_en_o} <= {ResetValue[13], ResetValue[9], ResetValue[6]};
+      {error_interrupt_en_o, conv_interrupt_en_o, dense_interrupt_en_o, memory_interrupt_en_o} <= ResetValue[11:8];
     end
     else if (we_i)
     begin
-      {conv_intrr_en_o, dense_intrr_en_o, error_intrr_en_o} <= {register_i[13], register_i[9], register_i[6]};
+      {error_interrupt_en_o, conv_interrupt_en_o, dense_interrupt_en_o, memory_interrupt_en_o} <= register_i[11:8];
     end
   end
 
-  assign register_o[15] = conv_done_o;
-  assign register_o[14] = conv_running_o;
-  assign register_o[13] = conv_intrr_en_o;
-  assign register_o[12] = conv_intrr_ac_o;
-  assign register_o[11] = dense_done_o;
-  assign register_o[10] = dense_running_o;
-  assign register_o[9] = dense_intrr_en_o;
-  assign register_o[8] = dense_intrr_ac_o;
-  assign register_o[7] = error_intrr_ac_o;
-  assign register_o[6] = error_intrr_en_o;
-  assign register_o[4:0] = error_code_o;
+  assign register_o[11] = error_interrupt_en_o;
+  assign register_o[10] = conv_interrupt_en_o;
+  assign register_o[9] = dense_interrupt_en_o;
+  assign register_o[8] = memory_interrupt_en_o;
+
+  assign register_o[6] = conv_running_o;
+  assign register_o[5] = dense_running_o;
+  assign register_o[4] = memory_running_o;
+  assign register_o[3] = error_active_o;
+  assign register_o[2] = conv_active_o;
+  assign register_o[1] = dense_active_o;
+  assign register_o[0] = memory_active_o;
+
+  assign interrupt_o = (error_active_o && error_interrupt_en_o) || (conv_active_o && conv_interrupt_en_o) || (dense_active_o && dense_interrupt_en_o) || (memory_active_o && memory_interrupt_en_o);
 endinterface
 
 

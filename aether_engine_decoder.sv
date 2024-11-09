@@ -60,7 +60,7 @@ module aether_engine_decoder (
     output logic [1:0] mem_command_o
   );
 
-`include "aether_constants.sv";
+`include "aether_constants.sv"
 
   //------------------------------------------------------------------------------------
   // No Operation Instruction
@@ -125,7 +125,8 @@ module aether_engine_decoder (
 
   always_comb
   begin
-    data_o = 16'h0000;
+    data_o = reg_stats_i.register_o;
+    reg_stats_i.read_full_i = 1'b0; // Clear interrupts on read
 
     if (instruction_i == RDR)
     begin
@@ -149,7 +150,10 @@ module aether_engine_decoder (
         REG_CPRM1:
           data_o = reg_cprm1_i.register_o;
         REG_STATS:
+        begin
           data_o = reg_stats_i.register_o;
+          reg_stats_i.read_full_i = 1'b1;
+        end
         default:
           $error("Invalid register read of register {%h}", param_1_i);
       endcase
