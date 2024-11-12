@@ -363,7 +363,7 @@ interface IStats #(
     end
     else if (we_int_i)
     begin
-      {conv_running_o, dense_running_o, memory_running_o} <= {conv_done_i, dense_done_i, memory_done_i};
+      {conv_running_o, dense_running_o, memory_running_o} <= {conv_running_i, dense_running_i, memory_running_i};
     end
   end
 

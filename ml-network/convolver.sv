@@ -1,5 +1,6 @@
 // Inspiration taken from https://thedatabus.in/convolver
 // and then heavily modified to fit the requirements of the project
+// TODO: when matrix size is cut in half, we can duplicate covolution and get 2 for the price of 1 ewngine
 module convolver #(
     parameter [13:0] MaxMatrixSize = 3, // maximum matrix size that this convolver can convolve
     parameter KernelSize = 3, // kernel size

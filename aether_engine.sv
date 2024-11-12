@@ -37,8 +37,7 @@ module aether_engine #(
 
     //Debugging
     input logic assert_on_i,
-    output logic signed[15:0] conv_data_o, // Needed for quartis simulation for now to compile and give accurate results
-    output logic signed [15:0] dense_out_o
+    output logic signed [15:0] dense_out_o // Needed for quartis build to estimate utilization
   );
 
 `include "aether_constants.sv"
@@ -74,15 +73,16 @@ module aether_engine #(
   logic [19:0] cnv_save_addr;
 
   logic signed [DataWidth-1:0] conv_data [ConvEngineCount-1:0];
+  logic [15:0] conv_data_mem;
   logic conv_valid;
   logic conv_done;
-
+  logic conv_save_mem;
   logic conv_need_data;
 
   // Dense Signals
   logic run_dense;
   logic [19:0] dns_save_addr;
-  logic signed [15:0] dense_out [DenseEngineCount-1:0];
+  logic signed [DataWidth-1:0] dense_out [DenseEngineCount-1:0];
 
   // Memory Signals
   logic [1:0] mem_command;
@@ -91,22 +91,12 @@ module aether_engine #(
   logic mem_data_read_valid;
   logic data_write_ready;
   logic mem_task_finished;
+  logic mem_task_running;
 
 
   //------------------------------------------------------------------------------------
   // Debug stuff
   //------------------------------------------------------------------------------------
-
-  logic signed [15:0] conv_data_temp;
-  always_comb
-  begin
-    conv_data_temp = conv_data[0];
-    for (int i = 1; i < ConvEngineCount; i++)
-    begin
-      conv_data_temp = conv_data_temp ^ conv_data[i];
-    end
-    conv_data_o = conv_data_temp;
-  end
 
   // For dense_out
   logic signed [15:0] dense_out_temp;
@@ -295,7 +285,8 @@ module aether_engine #(
   //------------------------------------------------------------------------------------
   // Convolution Module
   //------------------------------------------------------------------------------------
-  // Load data
+
+  localparam ConvEngineCountCeil = (ConvEngineCount / 2) + (ConvEngineCount % 2);
   logic conv_no_data;
   logic signed [DataWidth-1:0] conv_activation_data;
 
@@ -342,7 +333,11 @@ module aether_engine #(
                     ) conv_layer_inst (
                       .clk_i, // clock
                       .rst_i(rst_conv), // reset active low
-                      .en_i(!conv_no_data), // run the convolution
+                      .en_i(!conv_no_data && !(reg_cprm1.save_to_ram_o && conv_valid && mem_task_running)),
+                      // run the convolution
+                      // - We need to have data to run the convolution
+                      // - We need to not be saving the data to memory if the convolution is valid
+
 
                       // Configuration Registers
                       .reg_bcfg1_i(reg_bcfg1.read),
@@ -362,22 +357,73 @@ module aether_engine #(
                       .assert_on_i(assert_on_i)
                     );
 
+  // logic signed [DataWidth-1:0] conv_data [ConvEngineCount-1:0];
 
-  // fifo #(
-  //        .InputWidth(16), // Memory Interface is 64 bits
-  //        .OutputWidth(DataWidth),
-  //        .Depth(4) // Can store 4 words
-  //      ) conv_fifo (
-  //        .clk_i,
-  //        .rst_i(rst_conv),
-  //        .write_en_i(run_conv && mem_data_read_valid),
-  //        .read_en_i(1'b1),
-  //        .data_i(mem_data_read),
-  //        .data_o(conv_activation_data),
-  //        .full_o(),
-  //        .empty_o(conv_no_data)
-  //      );
+  logic [15:0] conv_save_mem_store [ConvEngineCountCeil-1:0];
+  logic [16*ConvEngineCountCeil-1:0] conv_store_raw;
+  logic conv_save_done;
 
+  d_ff #(
+         .Width(1)
+       ) conv_save_mem_delay_inst (
+         .clk_i,
+         .rst_i(conv_save_done || rst_full),
+         .en_i(conv_valid && reg_cprm1.save_to_ram_o),
+         .data_i(1'b1),
+         .data_o(conv_save_mem)
+       );
+
+  logic [$clog2(ConvEngineCountCeil+1)-1:0] engine_count_16b;
+  assign engine_count_16b = (reg_bcfg1.engine_count_o / 2) + (reg_bcfg1.engine_count_o % 2); // TODO: I do not like this
+
+  parallel_to_serial #(
+                       .N(16), // Width of the data
+                       .Length(ConvEngineCountCeil) // Number of registers
+                     ) save_conv_to_mem (
+                       .clk_i, // clock
+                       .en_i(conv_save_mem && data_write_ready), // enable shift
+                       .rst_i((conv_valid && reg_cprm1.save_to_ram_o && !conv_save_mem) || rst_full), //reset active low
+                       .store_i(conv_save_mem_store), //the reset register for every data
+                       .shift_count_i(engine_count_16b), //the number of shift
+                       .data_o(conv_data_mem), //data out
+                       .done_o(conv_save_done)
+                     );
+
+  logic [31:0] conv_save_mem_start_initial;
+  logic [31:0] conv_save_mem_start;
+  logic [31:0] conv_save_mem_end;
+
+  assign conv_save_mem_start_initial = {reg_memup.mem_upper_o[15:4], cnv_save_addr};
+  assign conv_save_mem_end = conv_save_mem_start + engine_count_16b;
+
+  d_ff_rst #(
+             .Width(32)
+           ) conv_save_mem_start_inst (
+             .clk_i,
+             .rst_i(rst_conv),
+             .rst_val_i(conv_save_mem_start_initial),
+             .en_i(conv_save_done),
+             .data_i(conv_save_mem_end),
+             .data_o(conv_save_mem_start)
+           );
+
+
+  generate
+    for (i = 0; i < ConvEngineCount; i++)
+    begin : gen_raw_conv_out_store
+      assign conv_store_raw[8*i +: 8] = conv_data[i];
+    end
+  endgenerate
+  // if (ConvEngineCountCeil != ConvEngineCount)
+  //   assign conv_store_raw[ConvEngineCountCeil-1:ConvEngineCountCeil-9] = 8'h00;
+
+
+  generate
+    for (i = 0; i < ConvEngineCountCeil; i++)
+    begin : parallel_to_serial_conv
+      assign conv_save_mem_store[i] = conv_store_raw[i*16 +: 16];
+    end
+  endgenerate
 
   ///--------------------------------------------------------------------------------------------
   // Dense Layer
@@ -493,10 +539,29 @@ module aether_engine #(
   //------------------------------------------------------------------------------------
 
   logic [15:0] data_write;
-  assign data_write = input_buffer_data; // TODO: Implement this with a state machine so that only one task can write/read from memory and handle the case when its busy
+  logic [31:0] mem_start_address;
+  logic [31:0] mem_end_address;
+
+  always_comb
+  begin
+    data_write = 16'h0000;
+    mem_start_address = {reg_memup.mem_upper_o, reg_mstrt.mem_start_o};
+    mem_end_address = {reg_memup.mem_upper_o, reg_mendd.mem_end_o};
+
+    if (conv_save_mem)
+    begin
+      data_write = conv_data_mem;
+      mem_start_address = conv_save_mem_start;
+      mem_end_address = conv_save_mem_end;
+    end
+    else if (load_mem_from_buffer)
+    begin
+      data_write = input_buffer_data;
+    end
+  end
 
   assign reg_stats.memory_done_i = mem_task_finished;
-  assign reg_stats.memory_running_i = !mem_task_finished;
+  assign reg_stats.memory_running_i = mem_task_running;
 
   aether_engine_generic_mem_simp #(
                                    .ClkRate(ClkRate)
@@ -504,13 +569,14 @@ module aether_engine #(
                                    .clk_i,
                                    .rst_i(rst_full),
                                    .command_i(mem_command),
-                                   .start_address_i({reg_memup.mem_upper_o, reg_mstrt.mem_start_o}),
-                                   .end_address_i({reg_memup.mem_upper_o, reg_mendd.mem_end_o}),
+                                   .start_address_i(mem_start_address),
+                                   .end_address_i(mem_end_address),
                                    .data_write_i(data_write),
                                    .data_read_o(mem_data_read),
                                    .data_read_valid_o(mem_data_read_valid),
                                    .data_write_ready_o(data_write_ready),
                                    .task_finished_o(mem_task_finished),
+                                   .mem_running_o(mem_task_running),
 
                                    // These ports should be connected directly to the SDRAM chip
                                    .sdram_clk_en_o,

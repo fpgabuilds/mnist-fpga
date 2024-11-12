@@ -129,7 +129,8 @@ module aether_engine_generic_mem_simp #(
     output logic [15:0] data_read_o,
     output logic data_read_valid_o,
     output logic data_write_ready_o,
-    output logic task_finished_o,
+    output logic task_finished_o, //TODO: this goes high on reset
+    output logic mem_running_o,
 
     // These ports should be connected directly to the SDRAM chip
     output logic sdram_clk_en_o,
@@ -162,6 +163,18 @@ module aether_engine_generic_mem_simp #(
     end
   end
 
+  logic [31:0] end_address_buffer;
+
+  d_ff #(
+         .Width(32)
+       ) end_address_buffer_inst (
+         .clk_i,
+         .rst_i(rst_i),
+         .en_i(mem_command_mid == IDLE && command_i != IDLE),
+         .data_i(end_address_i),
+         .data_o(end_address_buffer)
+       );
+
   d_ff #(
          .Width(2)
        ) command_buffer (
@@ -192,7 +205,7 @@ module aether_engine_generic_mem_simp #(
                         .en_i(mem_command != IDLE),
                         .rst_i((mem_command == IDLE) || rst_i),
                         .start_val_i(start_address_i),
-                        .end_val_i(end_address_i),
+                        .end_val_i(end_address_buffer),
                         .count_o(addr_count),
                         .assert_on_i
                       );
@@ -214,9 +227,9 @@ module aether_engine_generic_mem_simp #(
          .Width(1)
        ) task_finished_middle_inst (
          .clk_i,
-         .rst_i(task_finished_o),
+         .rst_i(),
          .en_i(1'b1),
-         .data_i(addr_count == end_address_i),
+         .data_i(addr_count == end_address_buffer),
          .data_o(task_finished_mid)
        );
 
@@ -242,6 +255,7 @@ module aether_engine_generic_mem_simp #(
 
   assign data_read_o = (mem_command == READ)? bram_output : 16'h0000;
   assign data_write_ready_o = (mem_command == WRITE) || (mem_command_mid == WRITE);
+  assign mem_running_o = (mem_command != IDLE) || (mem_command_mid != IDLE);
 
   //unused ports
 
