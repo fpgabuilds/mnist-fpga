@@ -15,8 +15,9 @@ module increment_then_stop #(
   begin
     if (assert_on_i)
     begin
-      assert (end_val_i >= start_val_i) else
-               $error("end_val_i must be greater than or equal to start_val_i");
+      if (en_i || rst_i)
+        assert (end_val_i >= start_val_i) else
+                 $error("end_val_i %h must be greater than or equal to start_val_i %h", end_val_i, start_val_i);
     end
   end
 

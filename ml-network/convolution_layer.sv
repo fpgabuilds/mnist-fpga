@@ -7,6 +7,7 @@ module convolution_layer #(
   ) (
     input logic clk_i, // clock
     input logic rst_i,
+    input logic start_i,
     input logic en_i, // run the convolution
 
     // Configuration Registers
@@ -22,11 +23,13 @@ module convolution_layer #(
     // Data Outputs
     output logic signed [N-1:0] data_o [EngineCount-1:0], // convolution data output
     output logic conv_valid_o, // convolution valid
+    output logic conv_running_o, // convolution running
     output logic conv_done_o, // convolution done
 
     input logic assert_on_i // enable assertions
   );
   logic [5:0] shift_amount;
+  logic enable;
   assign shift_amount = {reg_bcfg2_i.shift_high_o, reg_bcfg1_i.shift_low_o};
 
   always @ (posedge clk_i)
@@ -41,8 +44,23 @@ module convolution_layer #(
               $error("Requested MatrixSize + padding is greater than the instantiated MaxMatrixSize");
       assert(shift_amount < 2 * N) else // This is actually fine
               $warning("Shift amount is greater than the total bit width * 2");
+      if (enable)
+        assert(activation_data_i == activation_data_i) else
+                $error("activation_data_i is unknown %h", activation_data_i);
     end
   end
+
+  d_ff #(
+         .Width(1)
+       ) conv_running_inst (
+         .clk_i,
+         .rst_i(conv_done_o | rst_i),
+         .en_i(start_i),
+         .data_i(1'b1),
+         .data_o(conv_running_o)
+       );
+
+  assign enable = en_i && conv_running_o;
 
 
   localparam ConvOutputCount = (MaxMatrixSize-KernelSize+1)**2;
@@ -58,7 +76,7 @@ module convolution_layer #(
             .Bits(ConvOutputSize)
           ) conv_counter_inst (
             .clk_i, // 1st engine is always active
-            .en_i(conv_valid && en_i),
+            .en_i(conv_valid && enable),
             .rst_i,
             .start_val_i({ConvOutputSize{1'b0}}),
             .end_val_i({ConvOutputSize{1'b1}}),
@@ -86,7 +104,7 @@ module convolution_layer #(
                 ) conv_inst (
                   .clk_i,
                   .rst_i,
-                  .en_i((i < reg_bcfg1_i.engine_count_o) ? en_i : 1'b0),
+                  .en_i((i < reg_bcfg1_i.engine_count_o) ? enable : 1'b0),
                   .data_i(activation_data_i),
                   .stride_i(reg_cprm1_i.stride_o),
                   .matrix_size_i(reg_bcfg2_i.matrix_size_o),
@@ -134,11 +152,11 @@ module convolution_layer #(
                      .EngineCount(EngineCount)
                    ) layer_activation (
                      .clk_i,
-                     .en_i,
+                     .en_i(enable),
                      .activation_function_i(reg_cprm1_i.activation_function_o),
 
                      .value_i(data_conv),
-                     .value_o(data_o)
+                     .value_o(data_o) //TODO: default to zero when not running
                    );
 
   d_ff #(
@@ -146,7 +164,7 @@ module convolution_layer #(
        ) conv_valid_delay_inst (
          .clk_i,
          .rst_i,
-         .en_i,
+         .en_i(enable),
          .data_i((reg_cprm1_i.save_to_ram_o || reg_cprm1_i.save_to_buffer_o) ? conv_valid : 1'b0),
          .data_o(conv_valid_o)
        );
@@ -155,13 +173,11 @@ module convolution_layer #(
          .Width(1)
        ) conv_done_delay_inst (
          .clk_i,
-         .rst_i,
-         .en_i,
+         .rst_i(),
+         .en_i(1'b1),
          .data_i(conv_done == {EngineCount{1'b1}}),
          .data_o(conv_done_o)
        );
-
-  //assign status_o.running = en_i && !done;
 endmodule
 
 

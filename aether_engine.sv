@@ -78,6 +78,7 @@ module aether_engine #(
   logic conv_done;
   logic conv_save_mem;
   logic conv_save_done;
+  logic conv_save_mem_running;
 
   // Dense Signals
   logic run_dense;
@@ -157,8 +158,15 @@ module aether_engine #(
   //------------------------------------------------------------------------------------
   // Input Data Buffer
   //------------------------------------------------------------------------------------
+  localparam real Ratio = DataWidth/16;
+  localparam InputBuffer = ((MaxMatrixSize**2) * DataWidth/16);
 
-  localparam InputBuffer = MaxMatrixSize**2;
+  initial
+  begin
+    assert (16 % DataWidth == 0) else
+             $error("DataWidth must be a multiple of 2 up to 16");
+  end
+
   localparam BuffAddrSize = $clog2(InputBuffer + 1);
 
   logic [BuffAddrSize-1:0] input_buffer_addr;
@@ -299,31 +307,42 @@ module aether_engine #(
   assign reg_stats.conv_done_i = conv_done;
   assign reg_stats.conv_running_i = conv_running;
 
-  d_ff #(
-         .Width(1)
-       ) conv_running_inst (
-         .clk_i,
-         .rst_i(conv_done | rst_conv),
-         .en_i(run_conv),
-         .data_i(1'b1),
-         .data_o(conv_running)
-       );
-
   assign conv_no_data = !conv_running;
 
   simple_counter #(
                    .Bits(1)
                  ) simple_counter_inst_a (
                    .clk_i(clk_i),
-                   .en_i(conv_running),
+                   .en_i(conv_running && (!reg_cprm1.save_to_ram_o || reg_cprm1.save_to_ram_o && conv_save_done && conv_valid || !conv_valid)),
                    .rst_i(rst_conv),
                    .count_o(data_number)
                  );
 
+  logic data_number_buf;
+  d_ff #(
+         .Width(1)
+       ) conv_need_data_singlefire (
+         .clk_i,
+         .rst_i(1'b0),
+         .en_i(1'b1),
+         .data_i(data_number),
+         .data_o(data_number_buf)
+       );
+
   assign data_a = $signed(input_buffer_data[7:0]);
   assign data_b = $signed(input_buffer_data[15:8]);
-  assign conv_activation_data = (data_number)? data_a : data_b;
-  assign conv_need_data = data_number;
+  assign conv_need_data = data_number && !data_number_buf;
+
+  always_comb
+  begin
+    conv_activation_data = {DataWidth{1'b0}};
+    if (!conv_running)
+      conv_activation_data = {DataWidth{1'b0}};
+    else if (data_number)
+      conv_activation_data = data_a;
+    else
+      conv_activation_data = data_b;
+  end
 
   convolution_layer #(
                       .MaxMatrixSize(MaxMatrixSize),
@@ -332,8 +351,9 @@ module aether_engine #(
                       .N(DataWidth)
                     ) conv_layer_inst (
                       .clk_i, // clock
-                      .rst_i(rst_conv), // reset active low
-                      .en_i(!conv_no_data && (!reg_cprm1.save_to_ram_o || reg_cprm1.save_to_ram_o && (conv_save_done || !conv_save_mem))), // enable convolution
+                      .rst_i(rst_conv),
+                      .start_i(run_conv),
+                      .en_i(!conv_no_data && (!reg_cprm1.save_to_ram_o || reg_cprm1.save_to_ram_o && conv_save_done && conv_valid || !conv_valid)), // enable convolution
                       // run the convolution
                       // - We need to have data to run the convolution
                       // - We need to not be saving the data to memory if the convolution is valid
@@ -352,6 +372,7 @@ module aether_engine #(
                       // Data Outputs
                       .data_o(conv_data), // convolution data output
                       .conv_valid_o(conv_valid), // convolution valid
+                      .conv_running_o(conv_running), // convolution running
                       .conv_done_o(conv_done), // convolution done
 
                       .assert_on_i(assert_on_i)
@@ -385,19 +406,22 @@ module aether_engine #(
        );
 
   logic [$clog2(ConvEngineCountCeil+1)-1:0] engine_count_16b;
-  assign engine_count_16b = (reg_bcfg1.engine_count_o / 2) + (reg_bcfg1.engine_count_o % 2);
+  assign engine_count_16b = ((reg_bcfg1.engine_count_o / 2) + (reg_bcfg1.engine_count_o % 2));
 
   parallel_to_serial #(
                        .N(16), // Width of the data
                        .Length(ConvEngineCountCeil) // Number of registers
                      ) save_conv_to_mem (
                        .clk_i, // clock
-                       .en_i(conv_save_mem && data_write_ready), // enable shift
-                       .rst_i((conv_valid && reg_cprm1.save_to_ram_o && !conv_save_mem) || rst_full), //reset active low
+                       .run_i(conv_valid && reg_cprm1.save_to_ram_o),
+                       .en_i(data_write_ready), // enable shift
+                       .srst_i((conv_valid && reg_cprm1.save_to_ram_o && conv_save_done) || rst_full), //reset active low
                        .store_i(conv_save_mem_store), //the reset register for every data
                        .shift_count_i(engine_count_16b), //the number of shift
                        .data_o(conv_data_mem), //data out
-                       .done_o(conv_save_done)
+                       .done_o(conv_save_done),
+                       .running_o(conv_save_mem_running),
+                       .assert_on_i
                      );
 
   ///--------------------------------------------------------------------------------------------
@@ -527,7 +551,7 @@ module aether_engine #(
     if (conv_save_mem)
     begin
       data_write = conv_data_mem;
-      mem_en = !conv_save_done;
+      mem_en = conv_save_mem_running;
     end
     else if (load_mem_from_buffer)
     begin
