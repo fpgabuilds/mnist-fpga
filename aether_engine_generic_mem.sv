@@ -117,10 +117,11 @@
 
 // endmodule
 
-module aether_engine_generic_mem_simp #(
+module aether_engine_generic_mem_simp #( //TODO this memory is weird mix between sdram and bram
     parameter ClkRate = 143_000_000
   ) (
     input logic clk_i,
+    input logic en_i,
     input logic rst_i,
     input logic [1:0] command_i,
     input logic [31:0] start_address_i,
@@ -164,15 +165,26 @@ module aether_engine_generic_mem_simp #(
   end
 
   logic [31:0] end_address_buffer;
+  logic [31:0] start_address_buffer;
 
   d_ff #(
          .Width(32)
        ) end_address_buffer_inst (
          .clk_i,
          .rst_i(rst_i),
-         .en_i(mem_command_mid == IDLE && command_i != IDLE),
+         .en_i(mem_command == IDLE && command_i != IDLE),
          .data_i(end_address_i),
          .data_o(end_address_buffer)
+       );
+
+  d_ff #(
+         .Width(32)
+       ) start_address_buffer_inst (
+         .clk_i,
+         .rst_i(rst_i),
+         .en_i(mem_command == IDLE && command_i != IDLE),
+         .data_i(start_address_i),
+         .data_o(start_address_buffer)
        );
 
   d_ff #(
@@ -190,7 +202,7 @@ module aether_engine_generic_mem_simp #(
        ) command_buffer_2 (
          .clk_i,
          .rst_i(task_finished_o || rst_i),
-         .en_i(mem_command_mid != IDLE),
+         .en_i(mem_command_mid != IDLE  && (en_i || mem_command_mid == READ)),
          .data_i(mem_command_mid),
          .data_o(mem_command)
        );
@@ -202,9 +214,9 @@ module aether_engine_generic_mem_simp #(
                         .Bits(32)
                       ) addr_counter (
                         .clk_i,
-                        .en_i(mem_command != IDLE),
+                        .en_i(mem_command != IDLE && (en_i || mem_command == READ)),
                         .rst_i((mem_command == IDLE) || rst_i),
-                        .start_val_i(start_address_i),
+                        .start_val_i(start_address_buffer),
                         .end_val_i(end_address_buffer),
                         .count_o(addr_count),
                         .assert_on_i
@@ -229,7 +241,7 @@ module aether_engine_generic_mem_simp #(
          .clk_i,
          .rst_i(),
          .en_i(1'b1),
-         .data_i(addr_count == end_address_buffer),
+         .data_i(addr_count == end_address_buffer && end_address_buffer != 0),
          .data_o(task_finished_mid)
        );
 
@@ -237,7 +249,7 @@ module aether_engine_generic_mem_simp #(
          .Width(1)
        ) task_finished_inst (
          .clk_i,
-         .rst_i(),
+         .rst_i(rst_i),
          .en_i(1'b1),
          .data_i(task_finished_mid),
          .data_o(task_finished_o)

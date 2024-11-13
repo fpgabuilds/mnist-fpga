@@ -77,7 +77,7 @@ module aether_engine #(
   logic conv_valid;
   logic conv_done;
   logic conv_save_mem;
-  logic conv_need_data;
+  logic conv_save_done;
 
   // Dense Signals
   logic run_dense;
@@ -286,7 +286,7 @@ module aether_engine #(
   // Convolution Module
   //------------------------------------------------------------------------------------
 
-  localparam ConvEngineCountCeil = (ConvEngineCount / 2) + (ConvEngineCount % 2);
+  localparam ConvEngineCountCeil = (ConvEngineCount / 2) + (ConvEngineCount % 2); //TODO: This is hardcoded bitwidth, make it dynamic
   logic conv_no_data;
   logic signed [DataWidth-1:0] conv_activation_data;
 
@@ -333,7 +333,7 @@ module aether_engine #(
                     ) conv_layer_inst (
                       .clk_i, // clock
                       .rst_i(rst_conv), // reset active low
-                      .en_i(!conv_no_data && !(reg_cprm1.save_to_ram_o && conv_valid && mem_task_running)),
+                      .en_i(!conv_no_data && (!reg_cprm1.save_to_ram_o || reg_cprm1.save_to_ram_o && (conv_save_done || !conv_save_mem))), // enable convolution
                       // run the convolution
                       // - We need to have data to run the convolution
                       // - We need to not be saving the data to memory if the convolution is valid
@@ -358,23 +358,34 @@ module aether_engine #(
                     );
 
   // logic signed [DataWidth-1:0] conv_data [ConvEngineCount-1:0];
-
   logic [15:0] conv_save_mem_store [ConvEngineCountCeil-1:0];
   logic [16*ConvEngineCountCeil-1:0] conv_store_raw;
-  logic conv_save_done;
+  generate
+    for (i = 0; i < ConvEngineCount; i++)
+    begin : gen_raw_conv_out_store
+      assign conv_store_raw[8*i +: 8] = conv_data[i];
+    end
+  endgenerate
+
+  generate
+    for (i = 0; i < ConvEngineCountCeil; i++)
+    begin : parallel_to_serial_conv
+      assign conv_save_mem_store[i] = conv_store_raw[i*16 +: 16];
+    end
+  endgenerate
 
   d_ff #(
          .Width(1)
        ) conv_save_mem_delay_inst (
          .clk_i,
-         .rst_i(conv_save_done || rst_full),
+         .rst_i(conv_done || rst_full),
          .en_i(conv_valid && reg_cprm1.save_to_ram_o),
          .data_i(1'b1),
          .data_o(conv_save_mem)
        );
 
   logic [$clog2(ConvEngineCountCeil+1)-1:0] engine_count_16b;
-  assign engine_count_16b = (reg_bcfg1.engine_count_o / 2) + (reg_bcfg1.engine_count_o % 2); // TODO: I do not like this
+  assign engine_count_16b = (reg_bcfg1.engine_count_o / 2) + (reg_bcfg1.engine_count_o % 2);
 
   parallel_to_serial #(
                        .N(16), // Width of the data
@@ -388,42 +399,6 @@ module aether_engine #(
                        .data_o(conv_data_mem), //data out
                        .done_o(conv_save_done)
                      );
-
-  logic [31:0] conv_save_mem_start_initial;
-  logic [31:0] conv_save_mem_start;
-  logic [31:0] conv_save_mem_end;
-
-  assign conv_save_mem_start_initial = {reg_memup.mem_upper_o[15:4], cnv_save_addr};
-  assign conv_save_mem_end = conv_save_mem_start + engine_count_16b;
-
-  d_ff_rst #(
-             .Width(32)
-           ) conv_save_mem_start_inst (
-             .clk_i,
-             .rst_i(rst_conv),
-             .rst_val_i(conv_save_mem_start_initial),
-             .en_i(conv_save_done),
-             .data_i(conv_save_mem_end),
-             .data_o(conv_save_mem_start)
-           );
-
-
-  generate
-    for (i = 0; i < ConvEngineCount; i++)
-    begin : gen_raw_conv_out_store
-      assign conv_store_raw[8*i +: 8] = conv_data[i];
-    end
-  endgenerate
-  // if (ConvEngineCountCeil != ConvEngineCount)
-  //   assign conv_store_raw[ConvEngineCountCeil-1:ConvEngineCountCeil-9] = 8'h00;
-
-
-  generate
-    for (i = 0; i < ConvEngineCountCeil; i++)
-    begin : parallel_to_serial_conv
-      assign conv_save_mem_store[i] = conv_store_raw[i*16 +: 16];
-    end
-  endgenerate
 
   ///--------------------------------------------------------------------------------------------
   // Dense Layer
@@ -492,6 +467,7 @@ module aether_engine #(
                           .reg_bcfg2_i(reg_bcfg2.read_full),
                           .reg_bcfg3_i(reg_bcfg3.read_full),
                           .reg_cprm1_i(reg_cprm1.read_full),
+                          .reg_cprm1_ind_i(reg_cprm1.read),
                           .reg_stats_i(reg_stats.read_full),
                           .reg_memup_o(reg_memup.write_ext),
                           .reg_mstrt_o(reg_mstrt.write_ext),
@@ -542,23 +518,28 @@ module aether_engine #(
   logic [31:0] mem_start_address;
   logic [31:0] mem_end_address;
 
+  logic mem_en;
+
   always_comb
   begin
     data_write = 16'h0000;
-    mem_start_address = {reg_memup.mem_upper_o, reg_mstrt.mem_start_o};
-    mem_end_address = {reg_memup.mem_upper_o, reg_mendd.mem_end_o};
-
+    mem_en = 1'b0;
     if (conv_save_mem)
     begin
       data_write = conv_data_mem;
-      mem_start_address = conv_save_mem_start;
-      mem_end_address = conv_save_mem_end;
+      mem_en = !conv_save_done;
     end
     else if (load_mem_from_buffer)
     begin
       data_write = input_buffer_data;
+      mem_en = 1'b1;
     end
   end
+
+  //conv_save_memconv_save_done
+
+  assign mem_start_address = {reg_memup.mem_upper_o, reg_mstrt.mem_start_o};
+  assign mem_end_address = {reg_memup.mem_upper_o, reg_mendd.mem_end_o};
 
   assign reg_stats.memory_done_i = mem_task_finished;
   assign reg_stats.memory_running_i = mem_task_running;
@@ -567,6 +548,7 @@ module aether_engine #(
                                    .ClkRate(ClkRate)
                                  ) sys_ram_inst (
                                    .clk_i,
+                                   .en_i(mem_en),
                                    .rst_i(rst_full),
                                    .command_i(mem_command),
                                    .start_address_i(mem_start_address),

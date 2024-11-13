@@ -17,6 +17,7 @@ module aether_engine_decoder (
     IBcfg2.read_full reg_bcfg2_i,
     IBcfg3.read_full reg_bcfg3_i,
     ICprm1.read_full reg_cprm1_i,
+    ICprm1.read reg_cprm1_ind_i,
     IStats.read_full reg_stats_i,
 
     IMemup.write_ext reg_memup_o,
@@ -360,9 +361,9 @@ module aether_engine_decoder (
 
   always_comb
   begin
-    if (ldw_mem_write)
+    if (ldw_mem_write || (instruction_i == CNV && reg_cprm1_ind_i.save_to_ram_o) || instruction_i == DNS)
       mem_command_o = MEM_WRITE;
-    else if (ldw_mem_read || instruction_i == CNV || instruction_i == DNS)
+    else if (ldw_mem_read)
       mem_command_o = MEM_READ;
     else
       mem_command_o = MEM_IDLE;

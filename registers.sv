@@ -382,18 +382,18 @@ interface IStats #(
         error_active_o <= 1'b1; // Only set and not reset when interrupt is enabled
 
       if (!conv_interrupt_en_o || read_full_i)
-        conv_active_o <= conv_running_i;
-      else if (conv_running_i)
+        conv_active_o <= conv_done_i;
+      else if (conv_done_i)
         conv_active_o <= 1'b1; // Only set and not reset when interrupt is enabled
 
       if (!dense_interrupt_en_o || read_full_i)
-        dense_active_o <= dense_running_i;
-      else if (dense_running_i)
+        dense_active_o <= dense_done_i;
+      else if (dense_done_i)
         dense_active_o <= 1'b1; // Only set and not reset when interrupt is enabled
 
       if (!memory_interrupt_en_o || read_full_i)
-        memory_active_o <= memory_running_i;
-      else if (memory_running_i)
+        memory_active_o <= memory_done_i;
+      else if (memory_done_i)
         memory_active_o <= 1'b1; // Only set and not reset when interrupt is enabled
     end
   end

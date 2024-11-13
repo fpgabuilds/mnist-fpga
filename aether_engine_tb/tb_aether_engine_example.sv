@@ -36,7 +36,17 @@ module tb_aether_engine_example ();
                 );
 
   // Clock generation
-  always #5 clk = ~clk;
+  integer cycle_count = 0;
+  always
+  begin
+    #5 clk = ~clk;
+    cycle_count = cycle_count + 1;
+    if (cycle_count >= 8000)
+    begin
+      $display("Reached 4000 cycles, stopping simulation");
+      $stop;
+    end
+  end
 
   // Define a task to execute a command on the positive edge of the clock
   task execute_cmd(input [23:0] command);
@@ -53,11 +63,11 @@ module tb_aether_engine_example ();
     execute_cmd({RST, RST_FULL, 16'h0000});
     execute_cmd({NOP, 4'h0, 16'h0000});
     assert_on = 1'b1;
-    // Loading weights
+    $display("Loading weights  : #0, time: %t", $time);
     execute_cmd({WRR, REG_MSTRT, 16'h0000});
     execute_cmd({WRR, REG_MENDD, 16'h0011});
     execute_cmd({LDW, LDW_STRT, 16'h0000});
-    // Conv3x3 Layer: conv1
+    $display("Conv3x3 Layer: conv1  : #1, time: %t", $time);
     execute_cmd({LDW, LDW_CONT, 16'h6261});
     execute_cmd({LDW, LDW_CONT, 16'h2A63});
     execute_cmd({LDW, LDW_CONT, 16'h4023});
@@ -77,7 +87,7 @@ module tb_aether_engine_example ();
     execute_cmd({LDW, LDW_CONT, 16'h232A});
     execute_cmd({LDW, LDW_CONT, 16'h7440});
     execute_cmd({LDW, LDW_CONT, 16'h7273});
-    // Weight loading complete
+    $display("Weight loading complete  : #2, time: %t", $time);
     execute_cmd({LIP, LIP_STRT, 16'h0000});
     execute_cmd({LIP, LIP_CONT, 16'hFFFF});
     execute_cmd({LIP, LIP_CONT, 16'hFFFF});
@@ -471,38 +481,45 @@ module tb_aether_engine_example ();
     execute_cmd({LIP, LIP_CONT, 16'hFFFF});
     execute_cmd({LIP, LIP_CONT, 16'hFFFF});
     execute_cmd({LIP, LIP_CONT, 16'hFFFF});
-    // Conv3x3 Layer: conv1
+    $display("Conv3x3 Layer: conv1  : #3, time: %t", $time);
     execute_cmd({WRR, REG_BCFG1, 16'h4002});
     execute_cmd({WRR, REG_BCFG2, 16'h001C});
     execute_cmd({WRR, REG_BCFG3, 16'h0400});
-    // Conv3x3 Layer: conv1, chunk 0
+    $display("Conv3x3 Layer: conv1, chunk 0  : #4, time: %t", $time);
     execute_cmd({WRR, REG_MENDD, 16'h0008});
     execute_cmd({WRR, REG_MSTRT, 16'h0000});
     execute_cmd({LDW, LDW_CWGT, 16'h0000});
     execute_cmd({NOP, 4'h0, 16'h0000});
     @(posedge data_output[0]);
+    $display("Waiting until memory is done  : #5, time: %t", $time);
     execute_cmd({NOP, 4'h0, 16'h0000});
     execute_cmd({WRR, REG_CPRM1, 16'h0048});
     execute_cmd({RST, RST_CONV, 16'h0000});
     execute_cmd({CNV, 4'h0, 16'h0000});
     execute_cmd({NOP, 4'h0, 16'h0000});
     @(posedge data_output[2]);
+    $display("Waiting until convolution is done  : #6, time: %t", $time);
     execute_cmd({NOP, 4'h0, 16'h0000});
-    // Conv3x3 Layer: conv1, chunk 1
+    $display("Conv3x3 Layer: conv1, chunk 1  : #7, time: %t", $time);
     execute_cmd({WRR, REG_MENDD, 16'h0011});
     execute_cmd({WRR, REG_MSTRT, 16'h0009});
     execute_cmd({LDW, LDW_CWGT, 16'h0000});
     execute_cmd({NOP, 4'h0, 16'h0000});
     @(posedge data_output[0]);
+    $display("Waiting until memory is done  : #8, time: %t", $time);
     execute_cmd({NOP, 4'h0, 16'h0000});
     execute_cmd({WRR, REG_CPRM1, 16'h004E});
+    execute_cmd({WRR, REG_MSTRT, 16'h0012});
+    execute_cmd({WRR, REG_MENDD, 16'h02B5});
     execute_cmd({RST, RST_CONV, 16'h0000});
-    execute_cmd({CNV, 4'h0, 16'h0012});
+    execute_cmd({CNV, 4'h0, 16'h0000});
     execute_cmd({NOP, 4'h0, 16'h0000});
     @(posedge data_output[2]);
+    $display("Waiting until convolution is done  : #9, time: %t", $time);
     execute_cmd({NOP, 4'h0, 16'h0000});
-
-
+    @(posedge data_output[0]);
+    $display("Waiting until memory is done  : #10, time: %t", $time);
+    execute_cmd({NOP, 4'h0, 16'h0000});
 
     $stop;
 
