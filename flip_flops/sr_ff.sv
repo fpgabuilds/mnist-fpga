@@ -1,28 +1,35 @@
-module sr_ff #(
-    parameter Width = 1
-  ) (
+// Typically Set and Reset are not active at the same time, and if it is then the defualt behavior would be undefined.
+// This is not the "typical" implementation, but instead defines the behavior when both are active as setting the value.
+// This is useful when having a running register, that is set at the start but cleared at the end.
+// sr_ff _inst (
+//     .clk_i,
+//     .rst_i,
+//     .set_i,
+//     .srst_i,
+//     .data_o(),
+//     .assert_on_i
+//   );
+module sr_ff (
     input logic clk_i,
     input logic rst_i,
-    input logic en_i,
-    input logic [Width-1:0] s,
-    input logic r,
-    output logic [Width-1:0] data_o
+    input logic set_i,
+    input logic srst_i,
+    output logic data_o,
+    input logic assert_on_i // No affect on the functionality, only for simulation validation
   );
-
-  always_ff @(posedge clk_i or posedge rst_i)
+  always @(posedge clk_i)
   begin
-    if (rst_i)
-    begin
-      data_o <= {Width{1'b0}};
-    end
-    else if (en_i)
-    begin
-      if (r)
-        data_o <= {Width{1'b0}};
-      else if (s)
-        data_o <= data_o | s;
-    end
+    if (assert_on_i)
+      assert (!(set_i && rst_i)) else
+               $error("Set and reset can not be active at the same time, defaulting to set");
   end
 
+  always_ff @(posedge clk_i)
+    if (rst_i)
+      data_o <= 1'b0;
+    else if (set_i)
+      data_o <= 1'b1;
+    else if (srst_i)
+      data_o <= 1'b0;
 endmodule
 

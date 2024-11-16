@@ -20,29 +20,28 @@ module parallel_to_serial #(
     genvar i;
     for(i = 0; i < Length; i = i + 1)
     begin: shiftblock
-      d_ff #(
-             .Width(N)
-           ) store_registers_inst (
-             .clk_i,
-             .rst_i(1'b0),
-             .en_i(srst_i),
-             .data_i(store_i[i]),
-             .data_o(store[i])
-           );
+      d_ff_mult #(
+                  .Width(N)
+                ) store_registers_inst (
+                  .clk_i,
+                  .rst_i(1'b0),
+                  .en_i(srst_i),
+                  .data_i(store_i[i]),
+                  .data_o(store[i])
+                );
     end
   endgenerate
 
   logic running;
 
-  d_ff_srst #(
-              .Width(1)
-            ) running_delay_inst (
-              .clk_i,
-              .srst_i,
-              .en_i(run_i),
-              .data_i(1'b1),
-              .data_o(running)
-            );
+  sr_ff running_delay_inst (
+          .clk_i,
+          .rst_i(1'b0),
+          .set_i(run_i),
+          .srst_i,
+          .data_o(running),
+          .assert_on_i
+        );
 
   assign running_o = running && !done_o;
 
@@ -62,9 +61,7 @@ module parallel_to_serial #(
                            );
 
   logic shift_buffer;
-  d_ff_srst #(
-              .Width(1)
-            ) shift_buffer_inst (
+  d_ff_srst shift_buffer_inst ( // Technically this a delay
               .clk_i,
               .srst_i,
               .en_i(1'b1),
@@ -72,9 +69,8 @@ module parallel_to_serial #(
               .data_o(shift_buffer)
             );
 
-  d_ff_srst #(
-              .Width(1)
-            ) done_inst (
+
+  d_ff_srst done_inst ( // Technically this a delay
               .clk_i,
               .srst_i,
               .en_i(1'b1),

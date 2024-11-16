@@ -168,6 +168,7 @@ module aether_engine #(
   end
 
   localparam BuffAddrSize = $clog2(InputBuffer + 1);
+  localparam [BuffAddrSize-1:0] LastBufferAddr = InputBuffer - 1;
 
   logic [BuffAddrSize-1:0] input_buffer_addr;
   logic load_from_input_buffer;
@@ -176,14 +177,16 @@ module aether_engine #(
 
   assign load_from_input_buffer = reg_bcfg3.load_from_o == REG_BCFG3_LDFM_IDB; // TODO: Implement this
 
-  simple_counter #(
-                   .Bits(BuffAddrSize)
-                 ) simple_counter_inst (
-                   .clk_i(clk_data_i),
-                   .en_i(ldw_cont || lip_cont), // Continue load input buffer
-                   .rst_i(ldw_strt || lip_strt || rst_full), // Start load input buffer. TODO: do I really want to reset on full?
-                   .count_o(input_buffer_addr)
-                 );
+
+  simple_counter_end #(
+                       .Bits(BuffAddrSize)
+                     ) buffer_input_counter (
+                       .clk_i(clk_data_i),
+                       .en_i(ldw_cont || lip_cont), // Continue load input buffer
+                       .rst_i(ldw_strt || lip_strt || rst_full), // Start load input buffer. TODO: do I really want to reset on full?
+                       .end_val_i(LastBufferAddr), // The value the counter will stop at
+                       .count_o(input_buffer_addr)
+                     );
 
   logic [BuffAddrSize-1:0] mem_count_difference;
   assign mem_count_difference = reg_mendd.mem_end_o - reg_mstrt.mem_start_o;
@@ -195,7 +198,7 @@ module aether_engine #(
                         .en_i((load_from_input_buffer && conv_need_data) || (load_mem_from_buffer && data_write_ready)),
                         .rst_i(rst_conv || ldw_strt),
                         .start_val_i({BuffAddrSize{1'b0}}),
-                        .end_val_i((load_mem_from_buffer)? mem_count_difference : InputBuffer[BuffAddrSize-1:0]),
+                        .end_val_i((load_mem_from_buffer)? mem_count_difference : LastBufferAddr),
                         .count_o(input_buffer_count),
                         .assert_on_i
                       );
@@ -223,15 +226,14 @@ module aether_engine #(
   // Weight loading from buffer to ram
   //------------------------------------------------------------------------------------
 
-  d_ff #(
-         .Width(1)
-       ) load_buf_to_mem_wgts_inst (
-         .clk_i,
-         .rst_i(mem_task_finished || rst_full),
-         .en_i(ldw_move),
-         .data_i(1'b1),
-         .data_o(load_mem_from_buffer)
-       );
+  sr_ff load_buf_to_mem_wgts_inst (
+          .clk_i,
+          .rst_i(rst_full),
+          .set_i(ldw_move),
+          .srst_i(mem_task_finished),
+          .data_o(load_mem_from_buffer),
+          .assert_on_i
+        );
 
   //------------------------------------------------------------------------------------
   // Convolution Weight Module
@@ -245,15 +247,14 @@ module aether_engine #(
   logic [15:0] weight_shift_store [ConvWeightSizeMem-1:0];
   logic [(ConvWeightSizeMem * 16)-1:0] raw_store;
 
-  d_ff #(
-         .Width(1)
-       ) load_wgts_to_mem_inst (
-         .clk_i,
-         .rst_i(mem_task_finished),
-         .en_i(load_conv_weights),
-         .data_i(1'b1),
-         .data_o(load_conv_weights_longterm)
-       );
+  sr_ff load_wgts_to_mem_inst (
+          .clk_i,
+          .rst_i(1'b0),
+          .set_i(load_conv_weights),
+          .srst_i(mem_task_finished),
+          .data_o(load_conv_weights_longterm),
+          .assert_on_i
+        );
 
   shift_reg_with_store #(
                          .N(16), // Width of the data
@@ -319,15 +320,15 @@ module aether_engine #(
                  );
 
   logic data_number_buf;
-  d_ff #(
-         .Width(1)
-       ) conv_need_data_singlefire (
-         .clk_i,
-         .rst_i(1'b0),
-         .en_i(1'b1),
-         .data_i(data_number),
-         .data_o(data_number_buf)
-       );
+  d_delay #(
+            .Delay(1)
+          ) conv_need_data_singlefire (
+            .clk_i,
+            .rst_i(1'b0),
+            .en_i(1'b1),
+            .data_i(data_number),
+            .data_o(data_number_buf)
+          );
 
   assign data_a = $signed(input_buffer_data[7:0]);
   assign data_b = $signed(input_buffer_data[15:8]);
@@ -353,7 +354,7 @@ module aether_engine #(
                       .clk_i, // clock
                       .rst_i(rst_conv),
                       .start_i(run_conv),
-                      .en_i(!conv_no_data && (!reg_cprm1.save_to_ram_o || reg_cprm1.save_to_ram_o && conv_save_done && conv_valid || !conv_valid)), // enable convolution
+                      .req_next_i(!conv_no_data && (!reg_cprm1.save_to_ram_o || reg_cprm1.save_to_ram_o && conv_save_done && conv_valid || !conv_valid)), // enable convolution
                       // run the convolution
                       // - We need to have data to run the convolution
                       // - We need to not be saving the data to memory if the convolution is valid
@@ -395,15 +396,14 @@ module aether_engine #(
     end
   endgenerate
 
-  d_ff #(
-         .Width(1)
-       ) conv_save_mem_delay_inst (
-         .clk_i,
-         .rst_i(conv_done || rst_full),
-         .en_i(conv_valid && reg_cprm1.save_to_ram_o),
-         .data_i(1'b1),
-         .data_o(conv_save_mem)
-       );
+  sr_ff conv_save_mem_delay_inst (
+          .clk_i,
+          .rst_i(rst_full),
+          .set_i(conv_valid && reg_cprm1.save_to_ram_o),
+          .srst_i(conv_done),
+          .data_o(conv_save_mem),
+          .assert_on_i
+        );
 
   logic [$clog2(ConvEngineCountCeil+1)-1:0] engine_count_16b;
   assign engine_count_16b = ((reg_bcfg1.engine_count_o / 2) + (reg_bcfg1.engine_count_o % 2));

@@ -19,6 +19,28 @@ module simple_counter #(
   assign next_count = count_o + {{(Bits-1){1'b0}}, 1'b1};
 endmodule
 
+module simple_counter_end #(
+    parameter Bits
+  ) (
+    input logic clk_i,
+    input logic en_i,
+    input logic rst_i,
+    input logic [Bits-1:0] end_val_i,
+    output logic [Bits-1:0] count_o
+  );
+
+  logic [Bits-1:0] next_count;
+
+  always_ff @(posedge clk_i or posedge rst_i)
+  begin
+    if (rst_i)
+      count_o <= {Bits{1'b0}};
+    else if (en_i)
+      count_o <= next_count;
+  end
+  assign next_count = (count_o==end_val_i) ? {Bits{1'b0}} : count_o + {{(Bits-1){1'b0}}, 1'b1};
+endmodule
+
 
 // module tb_simple_counter;
 //   parameter Bits = 8;

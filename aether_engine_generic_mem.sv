@@ -167,45 +167,47 @@ module aether_engine_generic_mem_simp #( //TODO this memory is weird mix between
   logic [31:0] end_address_buffer;
   logic [31:0] start_address_buffer;
 
-  d_ff #(
-         .Width(32)
-       ) end_address_buffer_inst (
-         .clk_i,
-         .rst_i(rst_i),
-         .en_i(mem_command == IDLE && command_i != IDLE),
-         .data_i(end_address_i),
-         .data_o(end_address_buffer)
-       );
+  d_delay_mult #(
+                 .Bits(32),
+                 .Delay(1)
+               ) end_address_buffer_inst (
+                 .clk_i,
+                 .rst_i,
+                 .en_i(mem_command == IDLE && command_i != IDLE),
+                 .data_i(end_address_i),
+                 .data_o(end_address_buffer)
+               );
 
-  d_ff #(
-         .Width(32)
-       ) start_address_buffer_inst (
-         .clk_i,
-         .rst_i(rst_i),
-         .en_i(mem_command == IDLE && command_i != IDLE),
-         .data_i(start_address_i),
-         .data_o(start_address_buffer)
-       );
+  d_delay_mult #(
+                 .Bits(32),
+                 .Delay(1)
+               ) start_address_buffer_inst (
+                 .clk_i,
+                 .rst_i,
+                 .en_i(mem_command == IDLE && command_i != IDLE),
+                 .data_i(start_address_i),
+                 .data_o(start_address_buffer)
+               );
 
-  d_ff #(
-         .Width(2)
-       ) command_buffer (
-         .clk_i,
-         .rst_i(task_finished_o || rst_i),
-         .en_i(command_i != IDLE),
-         .data_i(command_i),
-         .data_o(mem_command_mid)
-       );
+  d_ff_mult #(
+              .Width(2)
+            ) command_buffer (
+              .clk_i,
+              .rst_i(task_finished_o || rst_i),
+              .en_i(command_i != IDLE),
+              .data_i(command_i),
+              .data_o(mem_command_mid)
+            );
 
-  d_ff #(
-         .Width(2)
-       ) command_buffer_2 (
-         .clk_i,
-         .rst_i(task_finished_o || rst_i),
-         .en_i(mem_command_mid != IDLE  && (en_i || mem_command_mid == READ)),
-         .data_i(mem_command_mid),
-         .data_o(mem_command)
-       );
+  d_ff_mult #(
+              .Width(2)
+            ) command_buffer_2 (
+              .clk_i,
+              .rst_i(task_finished_o || rst_i),
+              .en_i(mem_command_mid != IDLE  && (en_i || mem_command_mid == READ)),
+              .data_i(mem_command_mid),
+              .data_o(mem_command)
+            );
 
 
   logic [31:0] addr_count; // Total count
@@ -235,9 +237,7 @@ module aether_engine_generic_mem_simp #( //TODO this memory is weird mix between
                    );
 
   logic task_finished_mid;
-  d_ff #(
-         .Width(1)
-       ) task_finished_middle_inst (
+  d_ff task_finished_middle_inst (
          .clk_i,
          .rst_i(),
          .en_i(1'b1),
@@ -245,9 +245,7 @@ module aether_engine_generic_mem_simp #( //TODO this memory is weird mix between
          .data_o(task_finished_mid)
        );
 
-  d_ff #(
-         .Width(1)
-       ) task_finished_inst (
+  d_ff task_finished_inst (
          .clk_i,
          .rst_i(rst_i),
          .en_i(1'b1),
@@ -255,9 +253,7 @@ module aether_engine_generic_mem_simp #( //TODO this memory is weird mix between
          .data_o(task_finished_o)
        );
 
-  d_ff #(
-         .Width(1)
-       ) data_valid_buffer (
+  d_ff data_valid_buffer (
          .clk_i,
          .rst_i(task_finished_o),
          .en_i(1'b1),

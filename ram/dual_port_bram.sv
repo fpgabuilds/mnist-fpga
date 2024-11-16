@@ -22,10 +22,10 @@ module dual_port_bram #(
   begin
     if (assert_on_i)
     begin
-      assert (a_addr_i <= Depth) else
-               $error("Address A out of bounds");
-      assert (b_addr_i <= Depth) else
-               $error("Address A out of bounds");
+      assert (a_addr_i < Depth) else
+               $error("Address A out of bounds: %h, Depth: %h", a_addr_i, Depth);
+      assert (b_addr_i < Depth) else
+               $error("Address B out of bounds: %h, Depth: %h", b_addr_i, Depth);
     end
   end
 
