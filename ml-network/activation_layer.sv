@@ -1,5 +1,5 @@
 module activation_layer #(
-    parameter N = 16,
+    parameter N,
     parameter [11:0] EngineCount = 4095
   ) (
     input logic clk_i,
@@ -47,6 +47,9 @@ module activation_layer #(
         endcase
       end
     end
+    else
+      for (int i = 0; i < EngineCount; i = i + 1)
+        value_o[i] <= {N{1'b0}};
   end
 
 

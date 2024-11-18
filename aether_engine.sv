@@ -361,10 +361,10 @@ module aether_engine #(
 
 
                       // Configuration Registers
-                      .reg_bcfg1_i(reg_bcfg1.read),
-                      .reg_bcfg2_i(reg_bcfg2.read),
-                      .reg_bcfg3_i(reg_bcfg3.read),
-                      .reg_cprm1_i(reg_cprm1.read),
+                      .reg_bcfg1_i(reg_bcfg1.read_full),
+                      .reg_bcfg2_i(reg_bcfg2.read_full),
+                      .reg_bcfg3_i(reg_bcfg3.read_full),
+                      .reg_cprm1_i(reg_cprm1.read_full),
 
                       // Data Inputs
                       .kernel_weights_i(conv_kernel_weights), // kernel weights
