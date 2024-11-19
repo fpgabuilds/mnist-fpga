@@ -24,7 +24,7 @@ module sr_ff (
                $error("Set and reset can not be active at the same time, defaulting to set");
   end
 
-  always_ff @(posedge clk_i)
+  always_ff @(posedge clk_i or posedge rst_i)
     if (rst_i)
       data_o <= 1'b0;
     else if (set_i)
