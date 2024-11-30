@@ -6,9 +6,10 @@
 ![Diagram](core_d_ff.svg "Diagram")
 ## Generics
 
-| Generic name | Type     | Value | Description                                |
-| ------------ | -------- | ----- | ------------------------------------------ |
-| Bits         | unsigned | 1     | Bit width of the data, leave off for 1 bit |
+| Generic name | Type             | Value        | Description                                |
+| ------------ | ---------------- | ------------ | ------------------------------------------ |
+| Bits         | unsigned         | 1            | Bit width of the data, leave off for 1 bit |
+| Bits         | logic [Bits-1:0] | {Bits{1'b0}} | Reset value of the flip-flop               |
 
 ## Ports
 

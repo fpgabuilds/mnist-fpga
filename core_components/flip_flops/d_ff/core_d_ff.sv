@@ -1,6 +1,9 @@
 module core_d_ff #(
     /// Bit width of the data, leave off for 1 bit
-    parameter unsigned Bits = 1
+    parameter unsigned Bits = 1,
+
+    /// Reset value of the flip-flop
+    parameter logic [Bits-1:0] ResetValue = {Bits{1'b0}}
 ) (
     input logic clk_i,
     input logic rst_i,

@@ -1,3 +1,5 @@
+`include "../aether/aether_registers.sv"
+
 module aether_instruct_decoder (
     input logic clk_i,
 
@@ -61,7 +63,7 @@ module aether_instruct_decoder (
     output logic [1:0] mem_command_o
 );
 
-  `include "aether_constants.sv"
+  `include "../constants/aether_constants.sv"
 
   //------------------------------------------------------------------------------------
   // No Operation Instruction
