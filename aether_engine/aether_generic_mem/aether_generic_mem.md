@@ -63,12 +63,12 @@
 
 ## Instantiations
 
-- end_address_buffer_inst: d_delay_mult
-- start_address_buffer_inst: d_delay_mult
-- command_buffer: d_ff_mult
-- command_buffer_2: d_ff_mult
+- end_address_buffer_inst: core_delay
+- start_address_buffer_inst: core_delay
+- command_buffer: core_d_ff
+- command_buffer_2: core_d_ff
 - addr_counter: increment_then_stop
-- memory_store_inst: single_port_bram
-- task_finished_middle_inst: d_ff
-- task_finished_inst: d_ff
-- data_valid_buffer: d_ff
+- memory_store_inst: core_bram_single_port
+- task_finished_middle_inst: core_d_ff
+- task_finished_inst: core_d_ff
+- data_valid_buffer: core_d_ff

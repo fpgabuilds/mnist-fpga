@@ -39,15 +39,17 @@ module sim_ddr_64_bit #(
   genvar i;
   generate
     for (i = 0; i < 8; i++) begin : g_bram_inst
-      dual_port_bram #(
-          .DataWidth(8),
-          .Depth(RamSize)
+      core_bram_dual_port #(
+          .ADataWidth(8),
+          .ABitDepth (RamSize)
       ) ram (
-          .clk_i(clk_i),
+          .a_clk_i(clk_i),
           .a_write_en_i(write_en_i & byte_en_i[i]),
           .a_addr_i(bram_addr),
           .a_data_i(data_i[8*i+:8]),
           .a_data_o(),
+
+          .b_clk_i(clk_i),
           .b_write_en_i(1'b0),
           .b_addr_i(bram_addr),
           .b_data_i(8'b0),

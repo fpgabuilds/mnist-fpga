@@ -1,6 +1,6 @@
 // TODO: Add test cases
 // TODO: Add asserts to ensure reading withing bounds
-module single_port_bram #(
+module core_bram_single_port #(
     parameter unsigned DataWidth,
     parameter unsigned Depth
 ) (

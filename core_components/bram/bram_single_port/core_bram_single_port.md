@@ -1,9 +1,9 @@
 
-# Entity: single_port_bram 
-- **File**: single_port_bram.sv
+# Entity: core_bram_single_port 
+- **File**: core_bram_single_port.sv
 
 ## Diagram
-![Diagram](single_port_bram.svg "Diagram")
+![Diagram](core_bram_single_port.svg "Diagram")
 ## Generics
 
 | Generic name | Type     | Value     | Description |

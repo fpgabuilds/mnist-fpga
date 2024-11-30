@@ -210,17 +210,18 @@ module aether_engine #(
       .assert_on_i
   );
 
-  dual_port_bram #(
-      .DataWidth(16),
-      .Depth(InputBuffer)
+  core_bram_dual_port #(
+      .ADataWidth(16),
+      .ABitDepth (InputBuffer)
   ) input_buffer_bram (
-      .clk_i,
       // Port A
+      .a_clk_i(clk_i),
       .a_write_en_i(ldw_cont || lip_cont),
       .a_addr_i(input_buffer_addr),
       .a_data_i(param_2_i),
       .a_data_o(),
       // Port B
+      .b_clk_i(clk_i),
       .b_write_en_i(1'b0),  //TODO: Implement this
       .b_addr_i(input_buffer_count),
       .b_data_i(),
@@ -233,7 +234,7 @@ module aether_engine #(
   // Weight loading from buffer to ram
   //------------------------------------------------------------------------------------
 
-  sr_ff load_buf_to_mem_wgts_inst (
+  core_sr_ff load_buf_to_mem_wgts_inst (
       .clk_i,
       .rst_i (rst_full),
       .set_i (ldw_move),
@@ -254,7 +255,7 @@ module aether_engine #(
   logic [15:0] weight_shift_store[ConvWeightSizeMem-1:0];
   logic [(ConvWeightSizeMem * 16)-1:0] raw_store;
 
-  sr_ff load_wgts_to_mem_inst (
+  core_sr_ff load_wgts_to_mem_inst (
       .clk_i,
       .rst_i (1'b0),
       .set_i (load_conv_weights),
@@ -263,7 +264,7 @@ module aether_engine #(
       .assert_on_i
   );
 
-  shift_reg_with_store #(
+  core_shift_reg_store #(
       .N(16),  // Width of the data
       .Length(ConvWeightSizeMem)  // Number of registers
   ) conv_weight_mem_shift_inst (
@@ -327,14 +328,15 @@ module aether_engine #(
   );
 
   logic data_number_buf;
-  d_delay #(
+  core_delay #(
       .Delay(1)
   ) conv_need_data_singlefire (
       .clk_i,
       .rst_i (1'b0),
       .en_i  (1'b1),
       .data_i(data_number),
-      .data_o(data_number_buf)
+      .data_o(data_number_buf),
+      .assert_on_i
   );
 
   assign data_a = $signed(input_buffer_data[7:0]);
@@ -397,7 +399,7 @@ module aether_engine #(
     end
   endgenerate
 
-  sr_ff conv_save_mem_delay_inst (
+  core_sr_ff conv_save_mem_delay_inst (
       .clk_i,
       .rst_i (rst_full),
       .set_i (conv_valid && reg_cprm1.save_to_ram_o),

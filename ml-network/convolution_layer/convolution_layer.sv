@@ -1,10 +1,10 @@
-`include "../registers.sv"
+`include "../../aether_engine/aether_registers/aether_registers.sv"
 /*
 convolution_layer #(
       .MaxMatrixSize(16383),
       .KernelSize(),
       .EngineCount(1023),
-      .N()
+      .Bits()
     ) _inst (
       .clk_i,
       .rst_i,
@@ -33,7 +33,7 @@ module convolution_layer #(
     parameter logic [13:0] MaxMatrixSize = 16383,
     parameter unsigned KernelSize,  /// kernel size
     parameter logic [9:0] EngineCount = 1023,  /// Amount of instantiated convolvers
-    parameter unsigned N  /// total bit width
+    parameter unsigned Bits  /// total bit width
 ) (
     //------------------------------------------------------------------------------------
     // Non Time Critical Inputs (Initial or Asynchronous)
@@ -46,7 +46,7 @@ module convolution_layer #(
 
     /// Kernel Weights
     // These are cloned on start_i and do not depend on the input in further clock cycles
-    input wire signed [N-1:0] kernel_weights_i[EngineCount-1:0][KernelSize*KernelSize-1:0],
+    input wire signed [Bits-1:0] kernel_weights_i[EngineCount-1:0][KernelSize*KernelSize-1:0],
 
     // Configuration Registers, These are cloned on start_i and do not depend on the input in further clock cycles
     input logic [15:0] reg_bcfg1_i,
@@ -60,7 +60,7 @@ module convolution_layer #(
     input logic req_next_i,  // request next data, no garanteed clock cycles to complete
 
     // Activation Data
-    input logic signed [N-1:0] activation_data_i,
+    input logic signed [Bits-1:0] activation_data_i,
 
     //------------------------------------------------------------------------------------
     // Time Critical Outputs (1 clock cycle)
@@ -68,7 +68,7 @@ module convolution_layer #(
     output logic used_data_o,  // used input data
 
     output logic conv_valid_o,  // when high, the data_o is valid
-    output logic signed [N-1:0] data_o[EngineCount-1:0],  // convolution data output
+    output logic signed [Bits-1:0] data_o[EngineCount-1:0],  // convolution data output
     output logic conv_done_o,  // convolution done
 
     //------------------------------------------------------------------------------------
@@ -106,8 +106,8 @@ module convolution_layer #(
 
 
   logic conv_done_c4;
-  wire signed [N-1:0] kernel_weights_buffer[EngineCount-1:0][KernelSize*KernelSize-1:0];
-  sr_ff conv_running_sr (
+  wire signed [Bits-1:0] kernel_weights_buffer[EngineCount-1:0][KernelSize*KernelSize-1:0];
+  core_sr_ff conv_running_sr (
       .clk_i,
       .rst_i,
       .set_i (start_i),
@@ -120,8 +120,8 @@ module convolution_layer #(
     genvar i, j;
     for (i = 0; i < EngineCount; i++) begin : g_weight_engine
       for (j = 0; j < KernelSize * KernelSize; j++) begin : g_weight_kernel
-        d_ff_mult #(
-            .Bits(N)
+        core_d_ff #(
+            .Bits(Bits)
         ) kernel_conv_inst (
             .clk_i,
             .rst_i (1'b0),
@@ -137,7 +137,7 @@ module convolution_layer #(
   logic [15:0] reg_bcfg2;
   logic [15:0] reg_cprm1;
 
-  d_ff_mult #(
+  core_d_ff #(
       .Bits(16)
   ) reg_bcfg1_inst (
       .clk_i,
@@ -147,7 +147,7 @@ module convolution_layer #(
       .data_o(reg_bcfg1)
   );
 
-  d_ff_mult #(
+  core_d_ff #(
       .Bits(16)
   ) reg_bcfg2_inst (
       .clk_i,
@@ -157,7 +157,7 @@ module convolution_layer #(
       .data_o(reg_bcfg2)
   );
 
-  d_ff_mult #(
+  core_d_ff #(
       .Bits(16)
   ) reg_cprm1_inst (
       .clk_i,
@@ -184,7 +184,7 @@ module convolution_layer #(
       else $error("Requested EngineCount must be greater than 0");
       assert (Bcfg2MatrixSize(reg_bcfg2) + 2 * Crpm1Padding(reg_cprm1) <= MaxMatrixSize)
       else $error("Requested MatrixSize + padding is greater than the instantiated MaxMatrixSize");
-      assert (shift_amount < 2 * N)
+      assert (shift_amount < 2 * Bits)
       else  // This is actually fine
         $warning("Shift amount is greater than the total bit width * 2");
       if (has_data_i)
@@ -197,7 +197,7 @@ module convolution_layer #(
   // Load SR Flip-Flops
   //------------------------------------------------------------------------------------
   logic request_next_data;
-  sr_ff req_next_data_sr (
+  core_sr_ff req_next_data_sr (
       .clk_i,
       .rst_i(!conv_running_o),
       .set_i(req_next_i && conv_running_o),  // If both set and srst are high, output will be set
@@ -227,10 +227,10 @@ module convolution_layer #(
   localparam unsigned ConvOutputSize = $clog2(ConvOutputCount + 1);
   localparam logic [ConvOutputSize-1:0] ConvOutputEndVal = ConvOutputCount - 1;
 
-  logic signed [2*N-1:0] data_conv_c2[EngineCount-1:0];
+  logic signed [2*Bits-1:0] data_conv_c2[EngineCount-1:0];
 
-  logic signed [2*N-1:0] accum_data_in_c3 [EngineCount-1:0]; //Not buffered, available for the next clock cycle
-  logic signed [2*N-1:0] accum_data_out_c3[EngineCount-1:0];
+  logic signed [2*Bits-1:0] accum_data_in_c3 [EngineCount-1:0]; //Not buffered, available for the next clock cycle
+  logic signed [2*Bits-1:0] accum_data_out_c3[EngineCount-1:0];
   logic [ConvOutputSize-1:0] accum_addr_write;
   logic [ConvOutputSize-1:0] accum_addr_read;
 
@@ -246,7 +246,7 @@ module convolution_layer #(
 
   generate
     for (i = 0; i < EngineCount; i = i + 1) begin : g_conv_engines
-      logic signed [2*N-1:0] conv_result;
+      logic signed [2*Bits-1:0] conv_result;
       logic valid;
       logic done;
       logic engine_active;
@@ -266,7 +266,7 @@ module convolution_layer #(
       convolver #(
           .MaxMatrixSize(MaxMatrixSize),
           .KernelSize(KernelSize),
-          .N(N)
+          .Bits(Bits)
       ) conv_inst (
           .clk_i,
           .rst_i(!conv_running_o),
@@ -281,7 +281,7 @@ module convolution_layer #(
           .assert_on_i(assert_on_i && conv_running_o)
       );
 
-      assign data_conv_c2[i] = (engine_active && valid) ? conv_result : {2 * N{1'b0}};
+      assign data_conv_c2[i] = (engine_active && valid) ? conv_result : {2 * Bits{1'b0}};
 
       if (i == 0) begin : g_assign_first_mod_outputs
         assign conv_valid_c2 = valid;
@@ -289,40 +289,42 @@ module convolution_layer #(
         assign used_data_o   = conv_en;
       end
 
-      logic signed [2*N-1:0] prev_result;
+      logic signed [2*Bits-1:0] prev_result;
 
-      dual_port_bram #(  //TODO: add gateing to save power when this is not used
-          .DataWidth(2 * N),
-          .Depth(ConvOutputCount)
+      core_bram_dual_port #(  //TODO: add gateing to save power when this is not used
+          .ADataWidth(2 * Bits),
+          .ABitDepth (ConvOutputCount)
       ) accumulate_prev_conv (
-          .clk_i,
           // Port A (load data)
+          .a_clk_i(clk_i),
           .a_write_en_i(accum_write_c3 && engine_active),  // Write on valid
           .a_addr_i(accum_addr_write),
           .a_data_i(accum_data_in_c3[i]),
           .a_data_o(),
 
           // Port B (Read Previous Data For Accumulation)
+          .b_clk_i(clk_i),
           .b_write_en_i(1'b0),
           .b_addr_i(accum_addr_read),  //conv_counter != ConvOutputEndVal means run only once
-          .b_data_i({{2 * N} {1'b0}}),
+          .b_data_i({{2 * Bits} {1'b0}}),
           .b_data_o(prev_result),
 
           .assert_on_i
       );
 
-      assign accum_data_out_c3[i] = (engine_active) ? prev_result : {2 * N{1'b0}};
+      assign accum_data_out_c3[i] = (engine_active) ? prev_result : {2 * Bits{1'b0}};
     end
   endgenerate
 
-  d_delay #(
+  core_delay #(
       .Delay(1)
   ) conv_en_delay_inst (
       .clk_i,
       .rst_i (!conv_running_o),
       .en_i  (1'b1),
       .data_i(used_data_o),
-      .data_o(conv_en_c2)
+      .data_o(conv_en_c2),
+      .assert_on_i
   );
 
   //------------------------------------------------------------------------------------
@@ -342,7 +344,7 @@ module convolution_layer #(
       .count_o(accum_addr_read)
   );
 
-  d_delay_mult #(
+  core_delay #(
       .Delay(1),
       .Bits (ConvOutputSize)
   ) accum_addr_c3_inst (
@@ -350,48 +352,52 @@ module convolution_layer #(
       .rst_i (!conv_running_o),
       .en_i  (request_next_data || !conv_valid_c4 || !conv_valid_c3),
       .data_i(accum_addr_read),
-      .data_o(accum_addr_write)
+      .data_o(accum_addr_write),
+      .assert_on_i
   );
 
-  d_delay #(
+  core_delay #(
       .Delay(1)
   ) accum_write_c2_inst (
       .clk_i,
       .rst_i (!conv_running_o),
       .en_i  (request_next_data || !conv_valid_c4 || !conv_valid_c3),
       .data_i(accum_write_c2),
-      .data_o(accum_write_c3)
+      .data_o(accum_write_c3),
+      .assert_on_i
   );
 
-  logic signed [2*N-1:0] data_conv_c3[EngineCount-1:0];
+  logic signed [2*Bits-1:0] data_conv_c3[EngineCount-1:0];
 
 
   logic conv_done_c3;
 
-  d_delay #(
+  core_delay #(
       .Delay(1)
   ) conv_valid_c3_inst (
       .clk_i,
       .rst_i (!conv_running_o),
       .en_i  (request_next_data || !conv_valid_c3 || !conv_valid_c4),
       .data_i(conv_valid_c2),
-      .data_o(conv_valid_c3)
+      .data_o(conv_valid_c3),
+      .assert_on_i
   );
 
-  d_delay #(
+  core_delay #(
       .Delay(1)
   ) conv_done_c3_inst (
       .clk_i,
       .rst_i (!conv_running_o),
       .en_i  (request_next_data || !conv_valid_c3 || !conv_valid_c4),
       .data_i(conv_done_c2),
-      .data_o(conv_done_c3)
+      .data_o(conv_done_c3),
+      .assert_on_i
   );
 
   generate
     for (i = 0; i < EngineCount; i = i + 1) begin : g_conv_data_c3
-      d_ff_mult #(
-          .Bits(2 * N)
+      core_d_ff #(
+          .Bits(2 * Bits)
       ) conv_data_c3_inst (
           .clk_i,
           .rst_i (!conv_running_o),
@@ -420,29 +426,29 @@ module convolution_layer #(
   //  - accum_write_c2: When high, the data_o is valid, only valid for one clock cycle then turns off unless new data is valid
   //  - accum_data_out_c4: The accumulated data
 
-  logic signed [N-1:0] accum_data_out_c4[EngineCount-1:0];
+  logic signed [Bits-1:0] accum_data_out_c4[EngineCount-1:0];
 
   //TODO: Remove this from register
   //reg_bcfg3.shift_final_o;
 
   generate
     for (i = 0; i < EngineCount; i = i + 1) begin : g_conv_accum
-      logic signed [  2*N:0] sum_accum;
-      logic signed [2*N-1:0] sum;
-      logic signed [  N-1:0] accum_out;
+      logic signed [  2*Bits:0] sum_accum;
+      logic signed [2*Bits-1:0] sum;
+      logic signed [  Bits-1:0] accum_out;
 
       assign sum_accum = (Crpm1Accumulate(
           reg_cprm1
       )) ? data_conv_c3[i] + accum_data_out_c3[i] : data_conv_c3[i];
       //assign sum = sum_accum >>> shift_amount;
       assign sum = (Crpm1SaveToRam(reg_cprm1)) ? 16'h5555 : sum_accum >>> shift_amount;
-      assign accum_data_in_c3[i] = (i < Bcfg1EngineCount(reg_bcfg1)) ? sum : {2 * N{1'b0}};
+      assign accum_data_in_c3[i] = (i < Bcfg1EngineCount(reg_bcfg1)) ? sum : {2 * Bits{1'b0}};
 
-      assign accum_out = accum_data_in_c3[i] >>> (2 * N - N);
+      assign accum_out = accum_data_in_c3[i] >>> (2 * Bits - Bits);
 
 
-      d_ff_mult #(
-          .Bits(N)
+      core_d_ff #(
+          .Bits(Bits)
       ) accumed_data_inst (
           .clk_i,
           .rst_i (1'b0),
@@ -453,7 +459,7 @@ module convolution_layer #(
     end
   endgenerate
 
-  // d_ff valid_pulse_inst (
+  // core_d_ff valid_pulse_inst (
   //        .clk_i,
   //        .rst_i(!conv_running_o),
   //        .en_i(1'b1),
@@ -462,7 +468,7 @@ module convolution_layer #(
   //      );
 
 
-  d_ff conv_valid_c4_inst (
+  core_d_ff conv_valid_c4_inst (
       .clk_i,
       .rst_i(!conv_running_o),
 
@@ -472,14 +478,15 @@ module convolution_layer #(
       .data_o(conv_valid_c4)
   );
 
-  d_delay #(
+  core_delay #(
       .Delay(1)
   ) conv_done_c4_inst (
       .clk_i,
       .rst_i (!conv_running_o),
       .en_i  (request_next_data || !conv_valid_c4),
       .data_i(conv_done_c3),
-      .data_o(conv_done_c4)
+      .data_o(conv_done_c4),
+      .assert_on_i
   );
 
 
@@ -488,7 +495,7 @@ module convolution_layer #(
   //------------------------------------------------------------------------------------
 
   activation_layer #(
-      .N(N),
+      .Bits(Bits),
       .EngineCount(EngineCount)
   ) layer_activation (
       .clk_i,
@@ -499,7 +506,7 @@ module convolution_layer #(
       .value_o(data_o)
   );
 
-  d_ff conv_valid_delay (
+  core_d_ff conv_valid_delay (
       .clk_i,
       .rst_i (!conv_running_o),
       .en_i  (request_next_data),
@@ -507,150 +514,14 @@ module convolution_layer #(
       .data_o(conv_valid_o)
   );
 
-  d_delay #(
+  core_delay #(
       .Delay(1)
   ) conv_done_delay_c3_inst (
       .clk_i,
       .rst_i (rst_i),
       .en_i  (request_next_data),
       .data_i(conv_done_c4),
-      .data_o(conv_done_o)
+      .data_o(conv_done_o),
+      .assert_on_i
   );
-endmodule
-
-
-// TODO: Add more test that cover other features
-module tb_convolution_layer ();
-  parameter unsigned Bits = 8;
-  parameter unsigned EngineCount = 2;
-  parameter unsigned KernelSize = 3;
-  parameter unsigned MaxMatrixSize = 10;
-  parameter unsigned MatrixSize = 5;
-
-  logic clk;
-  logic en;
-  logic rst;
-
-  logic signed [Bits-1:0] kernel_weights[EngineCount-1:0][KernelSize*KernelSize-1:0];
-  logic signed [Bits-1:0] activation_data;
-
-  logic signed [Bits-1:0] data_out[EngineCount-1:0];
-  logic conv_valid;
-  logic conv_done;
-
-  logic assert_on;
-
-  logic start;
-
-  logic [15:0] reg_bcfg1;
-  logic [15:0] reg_bcfg2;
-  logic [15:0] reg_cprm1;
-
-  convolution_layer #(
-      .MaxMatrixSize(MaxMatrixSize),
-      .KernelSize(KernelSize),
-      .EngineCount(EngineCount),
-      .N(Bits)
-  ) uut (
-      .clk_i(clk),
-      .rst_i(rst),
-      .start_i(start),
-      .kernel_weights_i(kernel_weights),
-      .reg_bcfg1_i(reg_bcfg1),
-      .reg_bcfg2_i(reg_bcfg2),
-      .reg_cprm1_i(reg_cprm1),
-      .has_data_i(1'b1),
-      .req_next_i(en),
-      .activation_data_i(activation_data),
-      .used_data_o(),
-      .conv_valid_o(conv_valid),
-      .data_o(data_out),
-      .conv_done_o(conv_done),
-      .conv_running_o(),
-      .assert_on_i(assert_on)
-  );
-
-  // Clock generation
-  always #5 clk = ~clk;
-
-  assign kernel_weights[0][0] = 8'h01;  // top left
-  assign kernel_weights[0][1] = 8'h02;  // top middle
-  assign kernel_weights[0][2] = 8'h03;  // top right
-  assign kernel_weights[0][3] = 8'h04;  // middle left
-  assign kernel_weights[0][4] = 8'h05;  // center
-  assign kernel_weights[0][5] = 8'h06;  // middle right
-  assign kernel_weights[0][6] = 8'h07;  // bottom left
-  assign kernel_weights[0][7] = 8'h08;  // bottom middle
-  assign kernel_weights[0][8] = 8'h09;  // bottom right
-
-  assign kernel_weights[1][0] = 8'h0A;  // 10
-  assign kernel_weights[1][1] = 8'hF6;  // -10
-  assign kernel_weights[1][2] = 8'h14;  // 20
-  assign kernel_weights[1][3] = 8'hEC;  // -20
-  assign kernel_weights[1][4] = 8'h1E;  // 30
-  assign kernel_weights[1][5] = 8'hE2;  // -30
-  assign kernel_weights[1][6] = 8'h28;  // 40
-  assign kernel_weights[1][7] = 8'hD8;  // -40
-  assign kernel_weights[1][8] = 8'h32;  // 50
-
-
-  initial begin
-    clk = 1'b0;
-    rst = 1'b1;
-    en = 1'b0;
-    activation_data = 8'd255;
-    assert_on = 1'b0;
-    start = 1'b0;
-    reg_bcfg1 = 16'h0002;  // Shift = 0, EngineCount = 2
-    reg_bcfg2 = 16'h0005;  // MatrixSize = 5
-    reg_cprm1 = 16'b0000_0000_0100_0000;  // Stride = 1
-
-    @(posedge clk);
-    assert_on = 1'b1;
-    rst = 1'b0;
-
-    @(posedge clk);
-    start = 1'b1;
-
-    @(posedge clk);
-    en = 1'b1;
-    start = 1'b0;
-    reg_bcfg2 = 16'h0010;  // Test that these are cloned on start
-
-    for (int i = 0; i < MatrixSize * MatrixSize; i = i + 1) begin
-      activation_data = i;
-      @(posedge clk);
-    end
-
-    @(posedge conv_done);
-    @(posedge clk);
-    reg_bcfg2 = 16'h0005;  // MatrixSize = 5
-    reg_cprm1 = 16'b0000_0000_0100_0101;  // Stride = 1
-    rst = 1'b1;
-    @(posedge clk);
-    rst = 1'b0;
-    @(posedge clk);
-    start = 1'b1;
-    @(posedge clk);
-    start = 1'b0;
-
-    for (int i = 0; i < MatrixSize * MatrixSize; i = i + 1) begin
-      activation_data = -i;
-      @(posedge clk);
-    end
-
-    @(posedge conv_done);
-    @(posedge clk);
-
-    $stop;
-  end
-
-  always @(posedge clk) begin
-    if (conv_valid) begin
-      assert (data_out[0] == 8'h00)
-      else $error("Convolution 0 failed: output = %d, expected %d", data_out[0], 8'h00);
-      assert (data_out[1] == 8'h00)
-      else $error("Convolution 1 failed: output = %d, expected %d", data_out[1], 8'h00);
-    end
-  end
 endmodule

@@ -4,17 +4,17 @@
 module convolver #(
     parameter logic [13:0] MaxMatrixSize,  // maximum matrix size that this convolver can convolve
     parameter unsigned KernelSize,  // kernel size
-    parameter unsigned N  // total bit width
+    parameter unsigned Bits  // total bit width
 ) (
     input logic clk_i,  // clock
     input logic rst_i,  // reset active high
     input logic en_i,  // enable convolver
-    input logic signed [N-1:0] data_i,  //data in
+    input logic signed [Bits-1:0] data_i,  //data in
     input logic [5:0] stride_i,  // value of stride (horizontal and vertical stride are equal) 0-64
     input logic [13:0] matrix_size_i,  // size of the matrix
-    input wire signed [N-1:0] weights_i[KernelSize*KernelSize-1:0],  // weights
+    input wire signed [Bits-1:0] weights_i[KernelSize*KernelSize-1:0],  // weights
 
-    output logic signed [2*N-1:0] conv_o,  // convolution output
+    output logic signed [2*Bits-1:0] conv_o,  // convolution output
     output logic valid_conv_o,  // valid convolution output
     output logic end_conv_o,  // end of convolution
 
@@ -24,8 +24,8 @@ module convolver #(
     if (assert_on_i) begin
       assert (KernelSize > 1)
       else $error("KernelSize must be greater than 1");
-      assert (N > 0)
-      else $error("N must be greater than 0");
+      assert (Bits > 0)
+      else $error("Bits must be greater than 0");
       assert (matrix_size_i >= KernelSize)
       else $error("matrix_size_i must be greater than or equal to KernelSize");
       assert (stride_i < matrix_size_i)
@@ -40,7 +40,7 @@ module convolver #(
     end
   end
 
-  logic [2*N-1:0] conv_vals[KernelSize*KernelSize-2:0];
+  logic [2*Bits-1:0] conv_vals[KernelSize*KernelSize-2:0];
 
   generate
     genvar i;
@@ -48,13 +48,13 @@ module convolver #(
       if(i == 0) // first MAC unit
       begin : g_first_mac
         mac_int #(
-            .N(N)
+            .Bits(Bits)
         ) mac_start (
             .clk_i,
             .en_i,
             .value_i(data_i),
             .mult_i (weights_i[i]),
-            .add_i  ({2 * N{1'b0}}),
+            .add_i  ({2 * Bits{1'b0}}),
             .mac_o  (conv_vals[i])
         );
       end
@@ -63,7 +63,7 @@ module convolver #(
         if((i+1) == KernelSize*KernelSize) // end of convolver
         begin : g_conv_last_mac
           mac_int #(
-              .N(N)
+              .Bits(Bits)
           ) mac_final (
               .clk_i,
               .en_i,
@@ -73,9 +73,9 @@ module convolver #(
               .mac_o  (conv_o)
           );
         end else begin : g_row_last_mac
-          logic signed [2*N-1:0] end_row_data;
+          logic signed [2*Bits-1:0] end_row_data;
           mac_int #(
-              .N(N)
+              .Bits(Bits)
           ) mac_end_row (
               .clk_i,
               .en_i,
@@ -85,15 +85,15 @@ module convolver #(
               .mac_o  (end_row_data)
           );
 
-          logic [2*N-1:0] store[MaxMatrixSize-KernelSize-1:0];
-          shift_reg_with_store #(
-              .N(2 * N),
+          logic [2*Bits-1:0] store[MaxMatrixSize-KernelSize-1:0];
+          core_shift_reg_store #(
+              .Bits(2 * Bits),
               .Length(MaxMatrixSize - KernelSize)
           ) row_shift (
               .clk_i,
               .en_i,
               .rst_i(),
-              .rst_val_i({2 * N{1'b0}}),
+              .rst_val_i({2 * Bits{1'b0}}),
               .data_i(end_row_data),
               .data_o(),
               .store_o(store)
@@ -102,7 +102,7 @@ module convolver #(
         end
       end else begin : g_middle_mac
         mac_int #(
-            .N(N)
+            .Bits(Bits)
         ) mac_middle (
             .clk_i,
             .en_i,

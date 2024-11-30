@@ -63,5 +63,5 @@
 - command_shift_inst: shift_reg
 - burst_read_counter_inst: increment_then_stop
 - burst_write_counter_inst: increment_then_stop
-- memory_store_inst: single_port_bram
+- memory_store_inst: core_bram_single_port
 - read_shift_reg_inst: shift_reg

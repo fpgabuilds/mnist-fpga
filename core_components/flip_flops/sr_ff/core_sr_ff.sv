@@ -2,23 +2,13 @@
 /// This is not the "typical" implementation, but instead defines the behavior when both are active as setting the value.
 /// This is useful when having a running register, that is set at the start but cleared at the end.
 
-/*
-sr_ff _inst (
-    .clk_i,
-    .rst_i,
-    .set_i,
-    .srst_i,
-    .data_o(),
-    .assert_on_i
-  );
-*/
-module sr_ff (
+module core_sr_ff (
     input  logic clk_i,
     input  logic rst_i,
     input  logic set_i,
     input  logic srst_i,
     output logic data_o,
-    input  logic assert_on_i  // No affect on the functionality, only for simulation validation
+    input  logic assert_on_i  /// No affect on the functionality, only for simulation validation
 );
   always @(posedge clk_i) begin
     if (assert_on_i)

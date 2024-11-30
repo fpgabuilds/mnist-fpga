@@ -1,10 +1,10 @@
 module activation_relu #(
-    parameter unsigned N
+    parameter unsigned Bits
 ) (
     input logic clk_i,
     input logic en_i,
-    input logic signed [N-1:0] value_i,
-    output logic signed [N-1:0] value_o
+    input logic signed [Bits-1:0] value_i,
+    output logic signed [Bits-1:0] value_o
 );
 
   always_comb begin

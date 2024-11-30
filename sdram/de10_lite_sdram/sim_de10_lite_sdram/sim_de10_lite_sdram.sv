@@ -99,7 +99,7 @@ module de10_lite_sdram #(
       .assert_on_i(1'b1)
   );
 
-  single_port_bram #(
+  core_bram_single_port #(
       .DataWidth(16),
       .Depth(33_554_432)
   ) memory_store_inst (

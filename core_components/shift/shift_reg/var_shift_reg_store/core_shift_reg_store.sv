@@ -1,14 +1,14 @@
-module shift_reg_with_store #(
-    parameter unsigned N = 8,  // Width of the data
-    parameter unsigned Length = 3  // Number of registers
+module core_shift_reg_store #(
+    parameter unsigned Bits,   // Width of the data
+    parameter unsigned Length  // Number of registers
 ) (
     input logic clk_i,  // clock
     input logic en_i,  // enable shift
     input logic rst_i,  //reset
-    input logic [N-1:0] rst_val_i, //reset value (Every register will be initialized with this value)
-    input logic [N-1:0] data_i,  //data in
-    output logic [N-1:0] data_o,  //data out
-    output logic [N-1:0] store_o[Length-1:0]  //the register that holds the data
+    input logic [Bits-1:0] rst_val_i,  // Every register will be reset to this value
+    input logic [Bits-1:0] data_i,  //data in
+    output logic [Bits-1:0] data_o,  //data out
+    output logic [Bits-1:0] store_o[Length-1:0]  //the register that holds the data
 );
 
   generate

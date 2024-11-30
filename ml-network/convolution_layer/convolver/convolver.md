@@ -10,29 +10,29 @@
 | ------------- | ------------ | --------- | ----------- |
 | MaxMatrixSize | logic [13:0] | undefined |             |
 | KernelSize    | unsigned     | undefined |             |
-| N             | unsigned     | undefined |             |
+| Bits          | unsigned     | undefined |             |
 
 ## Ports
 
-| Port name     | Direction | Type                | Description |
-| ------------- | --------- | ------------------- | ----------- |
-| clk_i         | input     |                     |             |
-| rst_i         | input     |                     |             |
-| en_i          | input     |                     |             |
-| data_i        | input     | [N-1:0]             |             |
-| stride_i      | input     | [5:0]               |             |
-| matrix_size_i | input     | [13:0]              |             |
-| weights_i     | input     | wire signed [N-1:0] |             |
-| conv_o        | output    | [2*N-1:0]           |             |
-| valid_conv_o  | output    |                     |             |
-| end_conv_o    | output    |                     |             |
-| assert_on_i   | input     |                     |             |
+| Port name     | Direction | Type                   | Description |
+| ------------- | --------- | ---------------------- | ----------- |
+| clk_i         | input     |                        |             |
+| rst_i         | input     |                        |             |
+| en_i          | input     |                        |             |
+| data_i        | input     | [Bits-1:0]             |             |
+| stride_i      | input     | [5:0]                  |             |
+| matrix_size_i | input     | [13:0]                 |             |
+| weights_i     | input     | wire signed [Bits-1:0] |             |
+| conv_o        | output    | [2*Bits-1:0]           |             |
+| valid_conv_o  | output    |                        |             |
+| end_conv_o    | output    |                        |             |
+| assert_on_i   | input     |                        |             |
 
 ## Signals
 
 | Name                                 | Type                         | Description |
 | ------------------------------------ | ---------------------------- | ----------- |
-| conv_vals[KernelSize*KernelSize-2:0] | logic [2*N-1:0]              |             |
+| conv_vals[KernelSize*KernelSize-2:0] | logic [2*Bits-1:0]           |             |
 | min_cycles                           | logic                        |             |
 | row_conv                             | logic                        |             |
 | stride_conv                          | logic                        |             |

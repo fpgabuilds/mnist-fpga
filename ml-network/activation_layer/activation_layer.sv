@@ -1,24 +1,24 @@
 module activation_layer #(
-    parameter unsigned N,
+    parameter unsigned Bits,
     parameter logic [11:0] EngineCount = 4095
 ) (
     input logic clk_i,
     input logic en_i,
     input logic [2:0] activation_function_i,
 
-    input  wire signed  [N-1:0] value_i[EngineCount-1:0],
-    output logic signed [N-1:0] value_o[EngineCount-1:0]
+    input  wire signed  [Bits-1:0] value_i[EngineCount-1:0],
+    output logic signed [Bits-1:0] value_o[EngineCount-1:0]
 );
-  localparam logic [2:0] ActivFN_None = 0;
-  localparam logic [2:0] ActivFN_Relu = 1;
+  localparam logic [2:0] ActivFBits_Bitsone = 0;
+  localparam logic [2:0] ActivFBits_Relu = 1;
 
-  logic signed [N-1:0] next_outputs_relu[EngineCount-1:0];
+  logic signed [Bits-1:0] next_outputs_relu[EngineCount-1:0];
 
   generate
     genvar i;
     for (i = 0; i < EngineCount; i++) begin : g_activation
       activation_relu #(
-          .N(N)
+          .Bits(Bits)
       ) relu_inst (
           .clk_i(clk_i),
           .en_i(en_i),
@@ -34,12 +34,12 @@ module activation_layer #(
     if (en_i) begin
       for (int i = 0; i < EngineCount; i = i + 1) begin
         case (activation_function_i)
-          ActivFN_None: value_o[i] <= value_i[i];
-          ActivFN_Relu: value_o[i] <= next_outputs_relu[i];
+          ActivFBits_Bitsone: value_o[i] <= value_i[i];
+          ActivFBits_Relu: value_o[i] <= next_outputs_relu[i];
           default: value_o[i] <= value_i[i];
         endcase
       end
-    end else for (int i = 0; i < EngineCount; i = i + 1) value_o[i] <= {N{1'b0}};
+    end else for (int i = 0; i < EngineCount; i = i + 1) value_o[i] <= {Bits{1'b0}};
   end
 
 

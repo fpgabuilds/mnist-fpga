@@ -8,16 +8,16 @@
 
 | Generic name | Type     | Value     | Description |
 | ------------ | -------- | --------- | ----------- |
-| N            | unsigned | undefined |             |
+| Bits         | unsigned | undefined |             |
 
 ## Ports
 
-| Port name | Direction | Type    | Description |
-| --------- | --------- | ------- | ----------- |
-| clk_i     | input     |         |             |
-| en_i      | input     |         |             |
-| value_i   | input     | [N-1:0] |             |
-| value_o   | output    | [N-1:0] |             |
+| Port name | Direction | Type       | Description |
+| --------- | --------- | ---------- | ----------- |
+| clk_i     | input     |            |             |
+| en_i      | input     |            |             |
+| value_i   | input     | [Bits-1:0] |             |
+| value_o   | output    | [Bits-1:0] |             |
 
 ## Processes
 - unnamed: (  )

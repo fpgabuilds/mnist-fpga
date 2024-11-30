@@ -47,7 +47,7 @@ module aether_generic_mem #(  // This is simulation ram
   logic [31:0] end_address_buffer;
   logic [31:0] start_address_buffer;
 
-  d_delay_mult #(
+  core_delay #(
       .Bits (32),
       .Delay(1)
   ) end_address_buffer_inst (
@@ -55,10 +55,11 @@ module aether_generic_mem #(  // This is simulation ram
       .rst_i,
       .en_i  (mem_command == IDLE && command_i != IDLE),
       .data_i(end_address_i),
-      .data_o(end_address_buffer)
+      .data_o(end_address_buffer),
+      .assert_on_i
   );
 
-  d_delay_mult #(
+  core_delay #(
       .Bits (32),
       .Delay(1)
   ) start_address_buffer_inst (
@@ -66,11 +67,12 @@ module aether_generic_mem #(  // This is simulation ram
       .rst_i,
       .en_i  (mem_command == IDLE && command_i != IDLE),
       .data_i(start_address_i),
-      .data_o(start_address_buffer)
+      .data_o(start_address_buffer),
+      .assert_on_i
   );
 
-  d_ff_mult #(
-      .Width(2)
+  core_d_ff #(
+      .Bits(2)
   ) command_buffer (
       .clk_i,
       .rst_i (task_finished_o || rst_i),
@@ -79,8 +81,8 @@ module aether_generic_mem #(  // This is simulation ram
       .data_o(mem_command_mid)
   );
 
-  d_ff_mult #(
-      .Width(2)
+  core_d_ff #(
+      .Bits(2)
   ) command_buffer_2 (
       .clk_i,
       .rst_i (task_finished_o || rst_i),
@@ -105,7 +107,7 @@ module aether_generic_mem #(  // This is simulation ram
   );
 
   logic [15:0] bram_output;
-  single_port_bram #(
+  core_bram_single_port #(
       .DataWidth(16),
       .Depth(2 ** 16 - 1)
   ) memory_store_inst (
@@ -117,7 +119,7 @@ module aether_generic_mem #(  // This is simulation ram
   );
 
   logic task_finished_mid;
-  d_ff task_finished_middle_inst (
+  core_d_ff task_finished_middle_inst (
       .clk_i,
       .rst_i (),
       .en_i  (1'b1),
@@ -125,7 +127,7 @@ module aether_generic_mem #(  // This is simulation ram
       .data_o(task_finished_mid)
   );
 
-  d_ff task_finished_inst (
+  core_d_ff task_finished_inst (
       .clk_i,
       .rst_i (rst_i),
       .en_i  (1'b1),
@@ -133,7 +135,7 @@ module aether_generic_mem #(  // This is simulation ram
       .data_o(task_finished_o)
   );
 
-  d_ff data_valid_buffer (
+  core_d_ff data_valid_buffer (
       .clk_i,
       .rst_i (task_finished_o),
       .en_i  (1'b1),
@@ -220,7 +222,7 @@ endmodule
 //                       );
 
 
-//   sr_ff  #( // Store the command for the whole task
+//   core_sr_ff  #( // Store the command for the whole task
 //            .Width(2)
 //          ) cmd_buffer (
 //            .clk_i,
@@ -231,7 +233,7 @@ endmodule
 //            .data_o(command_buffer)
 //          );
 
-//   sr_ff  #(
+//   core_sr_ff  #(
 //            .Width(1)
 //          ) busy_inst (
 //            .clk_i,
