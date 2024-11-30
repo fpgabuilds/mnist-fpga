@@ -1,5 +1,6 @@
 module tb_aether_engine_example ();
-`include "../aether_constants.sv";
+  `include "../aether_constants.sv"
+  ;
 
   logic clk;
   logic [23:0] cmd;
@@ -8,54 +9,51 @@ module tb_aether_engine_example ();
   logic assert_on;
 
   aether_engine #(
-                  .DataWidth(8),
-                  .MaxMatrixSize(28),
-                  .ConvEngineCount(2),
-                  .DenseEngineCount(4),
-                  .ClkRate(143_000_000)
-                ) accelerator_inst (
-                  .clk_i(clk),
-                  .clk_data_i(clk),
-                  .instruction_i(cmd[23:20]),
-                  .param_1_i(cmd[19:16]),
-                  .param_2_i(cmd[15:0]),
-                  .data_o(data_output),
-                  .interrupt_o(interrupt),
+      .DataWidth(8),
+      .MaxMatrixSize(28),
+      .ConvEngineCount(2),
+      .DenseEngineCount(4),
+      .ClkRate(143_000_000)
+  ) accelerator_inst (
+      .clk_i(clk),
+      .clk_data_i(clk),
+      .instruction_i(cmd[23:20]),
+      .param_1_i(cmd[19:16]),
+      .param_2_i(cmd[15:0]),
+      .data_o(data_output),
+      .interrupt_o(interrupt),
 
-                  .sdram_clk_en_o(),
-                  .sdram_bank_activate_o(),
-                  .sdram_address_o(),
-                  .sdram_cs_o(),
-                  .sdram_row_addr_strobe_o(),
-                  .sdram_column_addr_strobe_o(),
-                  .sdram_we_o(),
-                  .sdram_dqm_o(),
-                  .sdram_dq_io(),
-                  .assert_on_i(assert_on),
-                  .dense_out_o()
-                );
+      .sdram_clk_en_o(),
+      .sdram_bank_activate_o(),
+      .sdram_address_o(),
+      .sdram_cs_o(),
+      .sdram_row_addr_strobe_o(),
+      .sdram_column_addr_strobe_o(),
+      .sdram_we_o(),
+      .sdram_dqm_o(),
+      .sdram_dq_io(),
+      .assert_on_i(assert_on),
+      .dense_out_o()
+  );
 
   // Clock generation
   integer cycle_count = 0;
-  always
-  begin
+  always begin
     #5 clk = ~clk;
     cycle_count = cycle_count + 1;
-    if (cycle_count >= 8000)
-    begin
+    if (cycle_count >= 8000) begin
       $display("Reached 4000 cycles, stopping simulation");
       $stop;
     end
   end
 
   // Define a task to execute a command on the positive edge of the clock
-  task execute_cmd(input [23:0] command);
+  task automatic execute_cmd(input logic [23:0] command);
     @(posedge clk);
     cmd = command;
   endtask
 
-  initial
-  begin
+  initial begin
     clk = 1'b0;
     cmd = 24'b0;
     assert_on = 1'b0;

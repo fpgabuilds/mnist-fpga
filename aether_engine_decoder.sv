@@ -2,10 +2,10 @@ module aether_engine_decoder (
     input logic clk_i,
 
     // Control Signals
-    input logic [3:0] instruction_i, // instruction input
-    input logic [3:0] param_1_i, // parameter 1 input
-    input logic [15:0] param_2_i, // parameter 2 input
-    output logic [15:0] data_o, // data output
+    input logic [3:0] instruction_i,  // instruction input
+    input logic [3:0] param_1_i,  // parameter 1 input
+    input logic [15:0] param_2_i,  // parameter 2 input
+    output logic [15:0] data_o,  // data output
 
     // Register Variables
     IVersn.read_full reg_versn_i,
@@ -59,9 +59,9 @@ module aether_engine_decoder (
 
     // Memory Variables
     output logic [1:0] mem_command_o
-  );
+);
 
-`include "aether_constants.sv"
+  `include "aether_constants.sv"
 
   //------------------------------------------------------------------------------------
   // No Operation Instruction
@@ -74,8 +74,7 @@ module aether_engine_decoder (
   // Reset Instruction Instruction
   //------------------------------------------------------------------------------------
 
-  always_comb
-  begin
+  always_comb begin
     rst_cwgt_o = 1'b0;
     rst_conv_o = 1'b0;
     rst_dwgt_o = 1'b0;
@@ -83,11 +82,9 @@ module aether_engine_decoder (
     rst_regs_o = 1'b0;
     rst_full_o = 1'b0;
 
-    if (instruction_i == RST)
-    begin
+    if (instruction_i == RST) begin
       case (param_1_i)
-        RST_FULL:
-        begin
+        RST_FULL: begin
           rst_cwgt_o = 1'b1;
           rst_conv_o = 1'b1;
           rst_dwgt_o = 1'b1;
@@ -95,18 +92,12 @@ module aether_engine_decoder (
           rst_regs_o = 1'b1;
           rst_full_o = 1'b1;
         end
-        RST_CWGT:
-          rst_cwgt_o = 1'b1;
-        RST_CONV:
-          rst_conv_o = 1'b1;
-        RST_DWGT:
-          rst_dwgt_o = 1'b1;
-        RST_DENS:
-          rst_dens_o = 1'b1;
-        RST_REGS:
-          rst_regs_o = 1'b1;
-        default:
-        begin
+        RST_CWGT: rst_cwgt_o = 1'b1;
+        RST_CONV: rst_conv_o = 1'b1;
+        RST_DWGT: rst_dwgt_o = 1'b1;
+        RST_DENS: rst_dens_o = 1'b1;
+        RST_REGS: rst_regs_o = 1'b1;
+        default: begin
           $error("Invalid reset command, consider using full reset instead");
           rst_cwgt_o = 1'b1;
           rst_conv_o = 1'b1;
@@ -124,39 +115,26 @@ module aether_engine_decoder (
   // Read Reset Instruction
   //------------------------------------------------------------------------------------
 
-  always_comb
-  begin
+  always_comb begin
     data_o = reg_stats_i.register_o;
-    reg_stats_i.read_full_i = 1'b0; // Clear interrupts on read
+    reg_stats_i.read_full_i = 1'b0;  // Clear interrupts on read
 
-    if (instruction_i == RDR)
-    begin
+    if (instruction_i == RDR) begin
       case (param_1_i)
-        REG_VERSN:
-          data_o = reg_versn_i.register_o;
-        REG_HWRID:
-          data_o = reg_hwrid_i.register_o;
-        REG_MEMUP:
-          data_o = reg_memup_i.register_o;
-        REG_MSTRT:
-          data_o = reg_mstrt_i.register_o;
-        REG_MENDD:
-          data_o = reg_mendd_i.register_o;
-        REG_BCFG1:
-          data_o = reg_bcfg1_i.register_o;
-        REG_BCFG2:
-          data_o = reg_bcfg2_i.register_o;
-        REG_BCFG3:
-          data_o = reg_bcfg3_i.register_o;
-        REG_CPRM1:
-          data_o = reg_cprm1_i.register_o;
-        REG_STATS:
-        begin
+        REG_VERSN: data_o = reg_versn_i.register_o;
+        REG_HWRID: data_o = reg_hwrid_i.register_o;
+        REG_MEMUP: data_o = reg_memup_i.register_o;
+        REG_MSTRT: data_o = reg_mstrt_i.register_o;
+        REG_MENDD: data_o = reg_mendd_i.register_o;
+        REG_BCFG1: data_o = reg_bcfg1_i.register_o;
+        REG_BCFG2: data_o = reg_bcfg2_i.register_o;
+        REG_BCFG3: data_o = reg_bcfg3_i.register_o;
+        REG_CPRM1: data_o = reg_cprm1_i.register_o;
+        REG_STATS: begin
           data_o = reg_stats_i.register_o;
           reg_stats_i.read_full_i = 1'b1;
         end
-        default:
-          $error("Invalid register read of register {%h}", param_1_i);
+        default:   $error("Invalid register read of register {%h}", param_1_i);
       endcase
     end
   end
@@ -164,8 +142,7 @@ module aether_engine_decoder (
   //------------------------------------------------------------------------------------
   // Write Register Instruction
   //------------------------------------------------------------------------------------
-  always_comb
-  begin
+  always_comb begin
     reg_memup_o.register_i = 16'h0000;
     reg_memup_o.we_i = 1'b0;
     reg_mstrt_o.register_i = 16'h0000;
@@ -184,55 +161,43 @@ module aether_engine_decoder (
     reg_stats_o.we_i = 1'b0;
 
 
-    if (instruction_i == WRR)
-    begin
+    if (instruction_i == WRR) begin
       case (param_1_i)
-        REG_VERSN:
-          $error("Cannot write to version register");
-        REG_HWRID:
-          $error("Cannot write to hardware ID register");
-        REG_MEMUP:
-        begin
+        REG_VERSN: $error("Cannot write to version register");
+        REG_HWRID: $error("Cannot write to hardware ID register");
+        REG_MEMUP: begin
           reg_memup_o.register_i = param_2_i;
           reg_memup_o.we_i = 1'b1;
         end
-        REG_MSTRT:
-        begin
+        REG_MSTRT: begin
           reg_mstrt_o.register_i = param_2_i;
           reg_mstrt_o.we_i = 1'b1;
         end
-        REG_MENDD:
-        begin
+        REG_MENDD: begin
           reg_mendd_o.register_i = param_2_i;
           reg_mendd_o.we_i = 1'b1;
         end
-        REG_BCFG1:
-        begin
+        REG_BCFG1: begin
           reg_bcfg1_o.register_i = param_2_i;
           reg_bcfg1_o.we_i = 1'b1;
         end
-        REG_BCFG2:
-        begin
+        REG_BCFG2: begin
           reg_bcfg2_o.register_i = param_2_i;
           reg_bcfg2_o.we_i = 1'b1;
         end
-        REG_BCFG3:
-        begin
+        REG_BCFG3: begin
           reg_bcfg3_o.register_i = param_2_i;
           reg_bcfg3_o.we_i = 1'b1;
         end
-        REG_CPRM1:
-        begin
+        REG_CPRM1: begin
           reg_cprm1_o.register_i = param_2_i;
           reg_cprm1_o.we_i = 1'b1;
         end
-        REG_STATS:
-        begin
+        REG_STATS: begin
           reg_stats_o.register_i = param_2_i;
           reg_stats_o.we_i = 1'b1;
         end
-        default:
-          $error("Invalid register write of register {%h}", param_1_i);
+        default:   $error("Invalid register write of register {%h}", param_1_i);
       endcase
     end
   end
@@ -243,8 +208,7 @@ module aether_engine_decoder (
   logic ldw_mem_read;
   logic ldw_mem_write;
 
-  always_comb
-  begin
+  always_comb begin
     ldw_cwgt_o = 1'b0;
     ldw_dwgt_o = 1'b0;
     ldw_strt_o = 1'b0;
@@ -253,34 +217,27 @@ module aether_engine_decoder (
     ldw_mem_read = 1'b0;
     ldw_mem_write = 1'b0;
 
-    if (instruction_i == LDW)
-    begin
+    if (instruction_i == LDW) begin
       case (param_1_i)
-        LDW_CWGT:
-        begin
-          ldw_cwgt_o = 1'b1;
+        LDW_CWGT: begin
+          ldw_cwgt_o   = 1'b1;
           ldw_mem_read = 1'b1;
         end
-        LDW_DWGT:
-        begin
-          ldw_dwgt_o = 1'b1;
+        LDW_DWGT: begin
+          ldw_dwgt_o   = 1'b1;
           ldw_mem_read = 1'b1;
         end
-        LDW_STRT:
-        begin
+        LDW_STRT: begin
           ldw_strt_o = 1'b1;
         end
-        LDW_CONT:
-        begin
+        LDW_CONT: begin
           ldw_cont_o = 1'b1;
         end
-        LDW_MOVE:
-        begin
+        LDW_MOVE: begin
           ldw_mem_write = 1'b1;
           ldw_move_o = 1'b1;
         end
-        default:
-        begin
+        default: begin
           $error("Invalid task command on LDW");
         end
       endcase
@@ -293,13 +250,11 @@ module aether_engine_decoder (
   // Convolve Instruction
   //------------------------------------------------------------------------------------
 
-  always_comb
-  begin
+  always_comb begin
     cnv_run_o = 1'b0;
     cnv_save_addr_o = 20'h0;
 
-    if (instruction_i == CNV)
-    begin
+    if (instruction_i == CNV) begin
       cnv_run_o = 1'b1;
       cnv_save_addr_o = {param_1_i, param_2_i};
     end
@@ -310,15 +265,12 @@ module aether_engine_decoder (
   // Dense Instruction
   //------------------------------------------------------------------------------------
 
-  always_comb
-  begin
+  always_comb begin
     dns_run_o = 1'b0;
     dns_save_addr_o = 20'h0;
 
-    if (instruction_i == DNS)
-    begin
-      if (param_1_i == 4'h0)
-      begin
+    if (instruction_i == DNS) begin
+      if (param_1_i == 4'h0) begin
         dns_run_o = 1'b1;
         dns_save_addr_o = {param_1_i, param_2_i};
       end
@@ -330,20 +282,15 @@ module aether_engine_decoder (
   // Load Input Data Instruction
   //------------------------------------------------------------------------------------
 
-  always_comb
-  begin
+  always_comb begin
     lip_strt_o = 1'b0;
     lip_cont_o = 1'b0;
 
-    if (instruction_i == LIP)
-    begin
+    if (instruction_i == LIP) begin
       case (param_1_i)
-        LIP_STRT:
-          lip_strt_o = 1'b1;
-        LIP_CONT:
-          lip_cont_o = 1'b1;
-        default:
-        begin
+        LIP_STRT: lip_strt_o = 1'b1;
+        LIP_CONT: lip_cont_o = 1'b1;
+        default: begin
           $error("Invalid task command on LIP");
         end
       endcase
@@ -355,17 +302,14 @@ module aether_engine_decoder (
   // Memory Management
   //------------------------------------------------------------------------------------
 
-  localparam MEM_IDLE = 2'b00;
-  localparam MEM_WRITE = 2'b01;
-  localparam MEM_READ = 2'b10;
+  localparam logic [1:0] MEM_IDLE = 2'b00;
+  localparam logic [1:0] MEM_WRITE = 2'b01;
+  localparam logic [1:0] MEM_READ = 2'b10;
 
-  always_comb
-  begin
+  always_comb begin
     if (ldw_mem_write || (instruction_i == CNV && reg_cprm1_ind_i.save_to_ram_o) || instruction_i == DNS)
       mem_command_o = MEM_WRITE;
-    else if (ldw_mem_read)
-      mem_command_o = MEM_READ;
-    else
-      mem_command_o = MEM_IDLE;
+    else if (ldw_mem_read) mem_command_o = MEM_READ;
+    else mem_command_o = MEM_IDLE;
   end
 endmodule
