@@ -84,6 +84,7 @@ module core_bram_dual_port #(
 
     input logic assert_on_i
 );
+`ifdef ENABLE_SIMULATION_ASSERTS
   always @(posedge a_clk_i) begin
     if (assert_on_i) begin
       assert (a_addr_i < ABitDepth)
@@ -92,6 +93,7 @@ module core_bram_dual_port #(
       else $error("Address B out of bounds: %h, Depth: %h", b_addr_i, ABitDepth);
     end
   end
+`endif
 
   logic [ADataWidth-1:0] memory[0:ABitDepth-1];
 

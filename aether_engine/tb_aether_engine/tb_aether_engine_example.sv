@@ -1,6 +1,6 @@
+`define ENABLE_SIMULATION_ASSERTS 1
 module tb_aether_engine_example ();
-  `include "../aether_constants/aether_constants.sv"
-  ;
+  `include "../constants/aether_constants.sv"
 
   logic clk;
   logic [23:0] cmd;

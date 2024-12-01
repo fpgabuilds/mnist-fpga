@@ -10,11 +10,13 @@ module core_sr_ff (
     output logic data_o,
     input  logic assert_on_i  /// No affect on the functionality, only for simulation validation
 );
+`ifdef ENABLE_SIMULATION_ASSERTS
   always @(posedge clk_i) begin
     if (assert_on_i)
       assert (!(set_i && rst_i))
       else $error("Set and reset can not be active at the same time, defaulting to set");
   end
+`endif
 
   always_ff @(posedge clk_i or posedge rst_i)
     if (rst_i) data_o <= 1'b0;

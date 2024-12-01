@@ -35,6 +35,7 @@ module aether_generic_mem #(  // This is simulation ram
   logic [1:0] mem_command_mid;
   logic [1:0] mem_command;
 
+`ifdef ENABLE_SIMULATION_ASSERTS
   always @(posedge clk_i) begin
     if (assert_on_i) begin
       assert (command_i == IDLE || command_i == WRITE || command_i == READ)
@@ -43,6 +44,7 @@ module aether_generic_mem #(  // This is simulation ram
       else $error("addr_count must be less than 2^25");
     end
   end
+`endif
 
   logic [31:0] end_address_buffer;
   logic [31:0] start_address_buffer;

@@ -20,6 +20,7 @@ module convolver #(
 
     input logic assert_on_i  // enable assertions
 );
+`ifdef ENABLE_SIMULATION_ASSERTS
   always @(posedge clk_i) begin
     if (assert_on_i) begin
       assert (KernelSize > 1)
@@ -39,6 +40,7 @@ module convolver #(
       else $error("matrix_size_i must be less than or equal to MaxMatrixSize");
     end
   end
+`endif
 
   logic [2*Bits-1:0] conv_vals[KernelSize*KernelSize-2:0];
 
@@ -87,7 +89,7 @@ module convolver #(
 
           logic [2*Bits-1:0] store[MaxMatrixSize-KernelSize-1:0];
           core_shift_reg_store #(
-              .Bits(2 * Bits),
+              .Bits  (2 * Bits),
               .Length(MaxMatrixSize - KernelSize)
           ) row_shift (
               .clk_i,

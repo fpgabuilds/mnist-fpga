@@ -22,6 +22,7 @@ module increment_then_stop_srst #(
     output logic [Bits-1:0] count_o,
     input logic assert_on_i
 );
+`ifdef ENABLE_SIMULATION_ASSERTS
   always @(posedge clk_i) begin
     if (assert_on_i) begin
       if (en_i || srst_i)
@@ -32,6 +33,7 @@ module increment_then_stop_srst #(
           );
     end
   end
+`endif
 
 
   logic [Bits-1:0] next_count;

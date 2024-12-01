@@ -20,8 +20,8 @@ module aether_engine #(
     input logic clk_i,  // clock
 
     /// clock for input data
+    ///    *(This is a stretch goal)*
     // TODO: implement this so that the main board can run at different speeds then the controller.
-    ///  *(This is a stretch goal)*
     input logic clk_data_i,
     // assign clk_data_i = clk_i; they should be set to the same for now
 
@@ -50,7 +50,8 @@ module aether_engine #(
     output logic signed [15:0] dense_out_o  // Needed for quartis build to estimate utilization
 );
 
-  `include "aether_constants.sv"
+  `include "./constants/aether_constants.sv"
+  import aether_registers::*;
 
   //------------------------------------------------------------------------------------
   // Variable Definitions
@@ -105,6 +106,19 @@ module aether_engine #(
   logic mem_task_running;
 
 
+  // Register Variables
+  logic [15:0] reg_versn;
+  logic [15:0] reg_hwrid;
+  logic [15:0] reg_memup;
+  logic [15:0] reg_mstrt;
+  logic [15:0] reg_mendd;
+  logic [15:0] reg_bcfg1;
+  logic [15:0] reg_bcfg2;
+  logic [15:0] reg_bcfg3;
+  logic [15:0] reg_cprm1;
+  logic [15:0] reg_stats;
+
+
   //------------------------------------------------------------------------------------
   // Debug stuff
   //------------------------------------------------------------------------------------
@@ -118,49 +132,6 @@ module aether_engine #(
     end
     dense_out_o = dense_out_temp;
   end
-
-  //------------------------------------------------------------------------------------
-  // Register Interfaces
-  //------------------------------------------------------------------------------------
-
-  IVersn #(.ResetValue(16'h6C00)) reg_versn ();
-  IHwrid #(.ResetValue(16'hB2E9)) reg_hwrid ();
-  IMemup #(.ResetValue(16'h0000)) reg_memup ();
-  IMstrt #(.ResetValue(16'h0000)) reg_mstrt ();
-  IMendd #(.ResetValue(16'h0000)) reg_mendd ();
-  IBcfg1 #(.ResetValue({4'b0, ConvEngineCount})) reg_bcfg1 ();
-  IBcfg2 #(.ResetValue({2'b0, MaxMatrixSize})) reg_bcfg2 ();
-  IBcfg3 #(.ResetValue(16'h0000)) reg_bcfg3 ();
-  ICprm1 #(.ResetValue(16'h0040)) reg_cprm1 ();
-  IStats #(.ResetValue(16'h0000)) reg_stats ();
-
-  assign reg_memup.clk_i = clk_i;
-  assign reg_memup.rst_i = rst_regs;
-
-  assign reg_mstrt.clk_i = clk_i;
-  assign reg_mstrt.rst_i = rst_regs;
-
-  assign reg_mendd.clk_i = clk_i;
-  assign reg_mendd.rst_i = rst_regs;
-
-  assign reg_bcfg1.clk_i = clk_i;
-  assign reg_bcfg1.rst_i = rst_regs;
-
-  assign reg_bcfg2.clk_i = clk_i;
-  assign reg_bcfg2.rst_i = rst_regs;
-
-  assign reg_bcfg3.clk_i = clk_i;
-  assign reg_bcfg3.rst_i = rst_regs;
-
-  assign reg_cprm1.clk_i = clk_i;
-  assign reg_cprm1.rst_i = rst_regs;
-
-  assign reg_stats.clk_i = clk_i;
-  assign reg_stats.rst_i = rst_regs;
-
-  assign reg_stats.we_int_i = 1'b1;
-  assign reg_stats.error_active_i = 1'b0;  // TODO: Implement this
-  assign interrupt_o = reg_stats.interrupt_o;
 
 
   //------------------------------------------------------------------------------------
@@ -182,7 +153,9 @@ module aether_engine #(
   logic [BuffAddrSize-1:0] input_buffer_count;
   logic [15:0] input_buffer_data;
 
-  assign load_from_input_buffer = reg_bcfg3.load_from_o == REG_BCFG3_LDFM_IDB; // TODO: Implement this
+  assign load_from_input_buffer = Bcfg3LoadFrom(
+          reg_bcfg3
+      ) == REG_BCFG3_LDFM_IDB;  // TODO: Implement this
 
 
   simple_counter_end #(
@@ -196,7 +169,7 @@ module aether_engine #(
   );
 
   logic [BuffAddrSize-1:0] mem_count_difference;
-  assign mem_count_difference = reg_mendd.mem_end_o - reg_mstrt.mem_start_o;
+  assign mem_count_difference = reg_mendd - reg_mstrt;
 
   increment_then_stop #(
       .Bits(BuffAddrSize)
@@ -313,8 +286,8 @@ module aether_engine #(
 
   logic conv_running;
 
-  assign reg_stats.conv_done_i = conv_done;
-  assign reg_stats.conv_running_i = conv_running;
+  // assign reg_stats.conv_done_i = conv_done;
+  // assign reg_stats.conv_running_i = conv_running;
 
   assign conv_no_data = !conv_running;
 
@@ -322,7 +295,11 @@ module aether_engine #(
       .Bits(1)
   ) simple_counter_inst_a (
       .clk_i(clk_i),
-      .en_i(conv_running && (!reg_cprm1.save_to_ram_o || reg_cprm1.save_to_ram_o && conv_save_done && conv_valid || !conv_valid)),
+      .en_i(conv_running && (!Crpm1SaveToRam(
+          reg_cprm1
+      ) || Crpm1SaveToRam(
+          reg_cprm1
+      ) && conv_save_done && conv_valid || !conv_valid)),
       .rst_i(rst_conv),
       .count_o(data_number)
   );
@@ -354,34 +331,35 @@ module aether_engine #(
       .MaxMatrixSize(MaxMatrixSize),
       .KernelSize(KernelSize),
       .EngineCount(ConvEngineCount),
-      .N(DataWidth)
+      .Bits(DataWidth)
   ) conv_layer_inst (
-      .clk_i,  // clock
+      .clk_i,
       .rst_i(rst_conv),
       .start_i(run_conv),
-      .req_next_i(!conv_no_data && (!reg_cprm1.save_to_ram_o || reg_cprm1.save_to_ram_o && conv_save_done && conv_valid || !conv_valid)), // enable convolution
+      .kernel_weights_i(conv_kernel_weights),
+      .reg_bcfg1_i(reg_bcfg1),
+      .reg_bcfg2_i(reg_bcfg2),
+      .reg_bcfg3_i(reg_bcfg3),
+      .reg_cprm1_i(reg_cprm1),
+      .has_data_i,
+
+      // enable convolution
       // run the convolution
       // - We need to have data to run the convolution
       // - We need to not be saving the data to memory if the convolution is valid
+      .req_next_i(!conv_no_data && (!Crpm1SaveToRam(
+          reg_cprm1
+      ) || Crpm1SaveToRam(
+          reg_cprm1
+      ) && conv_save_done && conv_valid || !conv_valid)),
 
-
-      // Configuration Registers
-      .reg_bcfg1_i(reg_bcfg1.read_full),
-      .reg_bcfg2_i(reg_bcfg2.read_full),
-      .reg_bcfg3_i(reg_bcfg3.read_full),
-      .reg_cprm1_i(reg_cprm1.read_full),
-
-      // Data Inputs
-      .kernel_weights_i (conv_kernel_weights),  // kernel weights
-      .activation_data_i(conv_activation_data), // activation data
-
-      // Data Outputs
-      .data_o(conv_data),  // convolution data output
-      .conv_valid_o(conv_valid),  // convolution valid
-      .conv_running_o(conv_running),  // convolution running
-      .conv_done_o(conv_done),  // convolution done
-
-      .assert_on_i(assert_on_i)
+      .activation_data_i(conv_activation_data),
+      .used_data_o,
+      .conv_valid_o(conv_valid),
+      .data_o(conv_data),
+      .conv_done_o(conv_done),
+      .conv_running_o(conv_running),
+      .assert_on_i
   );
 
   // logic signed [DataWidth-1:0] conv_data [ConvEngineCount-1:0];
@@ -402,23 +380,23 @@ module aether_engine #(
   core_sr_ff conv_save_mem_delay_inst (
       .clk_i,
       .rst_i (rst_full),
-      .set_i (conv_valid && reg_cprm1.save_to_ram_o),
+      .set_i (conv_valid && Crpm1SaveToRam(reg_cprm1)),
       .srst_i(conv_done),
       .data_o(conv_save_mem),
       .assert_on_i
   );
 
   logic [$clog2(ConvEngineCountCeil+1)-1:0] engine_count_16b;
-  assign engine_count_16b = ((reg_bcfg1.engine_count_o / 2) + (reg_bcfg1.engine_count_o % 2));
+  assign engine_count_16b = ((Bcfg1EngineCount(reg_bcfg1) / 2) + (Bcfg1EngineCount(reg_bcfg1) % 2));
 
   parallel_to_serial #(
       .N(16),  // Width of the data
       .Length(ConvEngineCountCeil)  // Number of registers
   ) save_conv_to_mem (
       .clk_i,  // clock
-      .run_i(conv_valid && reg_cprm1.save_to_ram_o),
+      .run_i(conv_valid && Crpm1SaveToRam(reg_cprm1)),
       .en_i(data_write_ready),  // enable shift
-      .srst_i((conv_valid && reg_cprm1.save_to_ram_o && conv_save_done) || rst_full),
+      .srst_i((conv_valid && Crpm1SaveToRam(reg_cprm1) && conv_save_done) || rst_full),
       .store_i(conv_save_mem_store),  //the reset register for every data
       .shift_count_i(engine_count_16b),  //the number of shift
       .data_o(conv_data_mem),  //data out
@@ -460,55 +438,47 @@ module aether_engine #(
       .dense_o(dense_out),
 
       // Configuration Registers
-      .reg_bcfg1_i(reg_bcfg1.read),
-      .reg_bcfg2_i(reg_bcfg2.read),
-      .reg_bcfg3_i(reg_bcfg3.read),
-      .reg_cprm1_i(reg_cprm1.read)
+      .reg_bcfg1_i(reg_bcfg1),
+      .reg_bcfg2_i(reg_bcfg2),
+      .reg_bcfg3_i(reg_bcfg3),
+      .reg_cprm1_i(reg_cprm1)
   );
 
-  assign reg_stats.dense_done_i = 1'b0;
-  assign reg_stats.dense_running_i = 1'b0;
+  // assign reg_stats.dense_done_i = 1'b0;
+  // assign reg_stats.dense_running_i = 1'b0;
 
   //------------------------------------------------------------------------------------
   // Instruction Decoder Module
   //------------------------------------------------------------------------------------
 
-  aether_engine_decoder decode_inst (
+  aether_instruct_decoder decode_inst (
       .clk_i,
 
-      // Control Signals
-      .instruction_i,  // instruction input
-      .param_1_i,  // parameter 1 input
-      .param_2_i,  // parameter 2 input
-      .data_o,  // data output
+      .instruction_i,
+      .param_1_i,
+      .param_2_i,
+      .data_o,
+
+      .reg_stats_i(),  // TODO: Implement interrupts
+      .we_reg_stats_i(),
 
       // Register Variables
-      .reg_versn_i(reg_versn.read_full),
-      .reg_hwrid_i(reg_hwrid.read_full),
-      .reg_memup_i(reg_memup.read_full),
-      .reg_mstrt_i(reg_mstrt.read_full),
-      .reg_mendd_i(reg_mendd.read_full),
-      .reg_bcfg1_i(reg_bcfg1.read_full),
-      .reg_bcfg2_i(reg_bcfg2.read_full),
-      .reg_bcfg3_i(reg_bcfg3.read_full),
-      .reg_cprm1_i(reg_cprm1.read_full),
-      .reg_cprm1_ind_i(reg_cprm1.read),
-      .reg_stats_i(reg_stats.read_full),
-      .reg_memup_o(reg_memup.write_ext),
-      .reg_mstrt_o(reg_mstrt.write_ext),
-      .reg_mendd_o(reg_mendd.write_ext),
-      .reg_bcfg1_o(reg_bcfg1.write_ext),
-      .reg_bcfg2_o(reg_bcfg2.write_ext),
-      .reg_bcfg3_o(reg_bcfg3.write_ext),
-      .reg_cprm1_o(reg_cprm1.write_ext),
-      .reg_stats_o(reg_stats.write_ext),
+      .reg_versn_o(reg_versn),
+      .reg_hwrid_o(reg_hwrid),
+      .reg_memup_o(reg_memup),
+      .reg_mstrt_o(reg_mstrt),
+      .reg_mendd_o(reg_mendd),
+      .reg_bcfg1_o(reg_bcfg1),
+      .reg_bcfg2_o(reg_bcfg2),
+      .reg_bcfg3_o(reg_bcfg3),
+      .reg_cprm1_o(reg_cprm1),
+      .reg_stats_o(reg_stats),
 
       // Reset Variables
       .rst_cwgt_o(rst_conv_weight),
       .rst_conv_o(rst_conv),
       .rst_dwgt_o(rst_dense_weight),
       .rst_dens_o(rst_dense),
-      .rst_regs_o(rst_regs),
       .rst_full_o(rst_full),
 
       // Load Weights Variables
@@ -559,11 +529,11 @@ module aether_engine #(
 
   //conv_save_memconv_save_done
 
-  assign mem_start_address = {reg_memup.mem_upper_o, reg_mstrt.mem_start_o};
-  assign mem_end_address = {reg_memup.mem_upper_o, reg_mendd.mem_end_o};
+  assign mem_start_address = {reg_memup, reg_mstrt};
+  assign mem_end_address   = {reg_memup, reg_mendd};
 
-  assign reg_stats.memory_done_i = mem_task_finished;
-  assign reg_stats.memory_running_i = mem_task_running;
+  // assign reg_stats.memory_done_i = mem_task_finished;
+  // assign reg_stats.memory_running_i = mem_task_running;
 
   aether_engine_generic_mem_simp #(
       .ClkRate(ClkRate)

@@ -12,15 +12,15 @@ module core_delay #(
 );
   /// Data storage for values in the delay
   logic [Bits-1:0] store[Delay-1:0];
-
+`ifdef ENABLE_SIMULATION_ASSERTS
   always @(posedge clk_i) begin : assert_valid
     if (assert_on_i) begin
       if (Delay == 0)
         assert (en_i)
         else $error("Can not have a zero delay");  // This should not be hard to add if needed
     end
-
   end
+`endif
 
   generate
     if (Delay == 0) assign data_o = data_i;

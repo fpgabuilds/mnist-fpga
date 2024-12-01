@@ -1,4 +1,3 @@
-`include "../../aether_engine/aether_registers/aether_registers.sv"
 /*
 convolution_layer #(
       .MaxMatrixSize(16383),
@@ -30,9 +29,9 @@ convolution_layer #(
 // TODO: Allow for multiple kernels sizes
 module convolution_layer #(
     /// maximum matrix size that this convolver can convolve
-    parameter logic [13:0] MaxMatrixSize = 16383,
+    parameter logic [13:0] MaxMatrixSize,
     parameter unsigned KernelSize,  /// kernel size
-    parameter logic [9:0] EngineCount = 1023,  /// Amount of instantiated convolvers
+    parameter logic [9:0] EngineCount,  /// Amount of instantiated convolvers
     parameter unsigned Bits  /// total bit width
 ) (
     //------------------------------------------------------------------------------------
@@ -81,6 +80,7 @@ module convolution_layer #(
     //------------------------------------------------------------------------------------
     input logic assert_on_i  // enable assertions
 );
+  import aether_registers::*;
 
   //------------------------------------------------------------------------------------
   // Time 0, Initialize Convolution
@@ -175,7 +175,7 @@ module convolution_layer #(
   // Debugging
   //------------------------------------------------------------------------------------
   logic enable_d;
-
+`ifdef ENABLE_SIMULATION_ASSERTS
   always @(posedge clk_i) begin
     if (assert_on_i && conv_running_o) begin
       assert (Bcfg1EngineCount(reg_bcfg1) <= EngineCount)
@@ -192,6 +192,7 @@ module convolution_layer #(
         else $error("activation_data_i is unknown %h", activation_data_i);
     end
   end
+`endif
 
   //------------------------------------------------------------------------------------
   // Load SR Flip-Flops

@@ -10,12 +10,14 @@ module counter #(
     output logic [Bits-1:0] count_o,
     input logic assert_on_i
 );
+`ifdef ENABLE_SIMULATION_ASSERTS
   always @(posedge clk_i) begin
     if (assert_on_i) begin
       assert (end_val_i >= start_val_i)
       else $error("end_val_i must be greater than or equal to start_val_i");
     end
   end
+`endif
 
   logic [Bits-1:0] next_count;
 

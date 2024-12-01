@@ -1,3 +1,52 @@
+/*
+aether_register_ff#(
+    .RegVersnDefault(16'h6C00),
+    .RegHwridDefault(16'hB2E9),
+    .RegMemupDefault(16'h0000),
+    .RegMstrtDefault(16'h0000),
+    .RegMenddDefault(16'h0000),
+    .RegBcfg1Default(16'h0000),
+    .RegBcfg2Default(16'h0000),
+    .RegBcfg3Default(16'h0000),
+    .RegCprm1Default(16'h0040),
+    .RegStatsDefault(16'h0000)
+) (
+    .clk_i,
+    .rst_i,
+
+    .reg_memup_i,
+    .we_memup_i,
+    .reg_mstrt_i,
+    .we_mstrt_i,
+    .reg_mendd_i,
+    .we_mendd_i,
+    .reg_bcfg1_i,
+    .we_bcfg1_i,
+    .reg_bcfg2_i,
+    .we_bcfg2_i,
+    .reg_bcfg3_i,
+    .we_bcfg3_i,
+    .reg_cprm1_i,
+    .we_cprm1_i,
+    .reg_stats_lower_i,
+    .we_stats_lower_i,
+    .reg_stats_upper_i,
+    .we_stats_upper_i,
+
+    .reg_versn_o(),
+    .reg_hwrid_o(),
+    .reg_memup_o(),
+    .reg_mstrt_o(),
+    .reg_mendd_o(),
+    .reg_bcfg1_o(),
+    .reg_bcfg2_o(),
+    .reg_bcfg3_o(),
+    .reg_cprm1_o(),
+    .reg_stats_o()
+);
+*/
+
+
 module aether_register_ff #(
     /// Version Register Value
     parameter logic [15:0] RegVersnDefault = 16'h6C00,
