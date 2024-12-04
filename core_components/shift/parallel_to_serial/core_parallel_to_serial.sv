@@ -20,7 +20,7 @@ module core_parallel_to_serial #(
     genvar i;
     for (i = 0; i < Length; i = i + 1) begin : g_shiftblock
       core_d_ff #(
-          .Width(Bits)
+          .Bits(Bits)
       ) store_registers_inst (
           .clk_i,
           .rst_i (1'b0),
@@ -47,7 +47,7 @@ module core_parallel_to_serial #(
 
   logic [CountSize-1:0] position_count;
 
-  core_increment_then_stop_srts #(
+  increment_then_stop_srst #(
       .Bits(CountSize)
   ) output_position_count (
       .clk_i,

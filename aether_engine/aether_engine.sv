@@ -82,6 +82,7 @@ module aether_engine #(
   // Convolution Signals
   logic run_conv;
   logic [19:0] cnv_save_addr;
+  logic conv_running;
 
   logic signed [DataWidth-1:0] conv_data[ConvEngineCount-1:0];
   logic [15:0] conv_data_mem;
@@ -90,6 +91,7 @@ module aether_engine #(
   logic conv_save_mem;
   logic conv_save_done;
   logic conv_save_mem_running;
+  logic conv_data_used_half;
 
   // Dense Signals
   logic run_dense;
@@ -149,13 +151,8 @@ module aether_engine #(
   localparam logic [BuffAddrSize-1:0] LastBufferAddr = InputBuffer - 1;
 
   logic [BuffAddrSize-1:0] input_buffer_addr;
-  logic load_from_input_buffer;
   logic [BuffAddrSize-1:0] input_buffer_count;
   logic [15:0] input_buffer_data;
-
-  assign load_from_input_buffer = Bcfg3LoadFrom(
-          reg_bcfg3
-      ) == REG_BCFG3_LDFM_IDB;  // TODO: Implement this
 
 
   simple_counter_end #(
@@ -171,11 +168,18 @@ module aether_engine #(
   logic [BuffAddrSize-1:0] mem_count_difference;
   assign mem_count_difference = reg_mendd - reg_mstrt;
 
+  /// This counter is used to keep track of the number of elements in the buffer
+  /// It incremets in 2 Conditions:
+  /// 1. When the convolution is running with the load from buffer set and the data is used
+  /// 2. When the memory is being loaded from the buffer and the data is ready to be written
   increment_then_stop #(
       .Bits(BuffAddrSize)
   ) data_buffer_counter_inst (
       .clk_i,
-      .en_i((load_from_input_buffer && conv_need_data) || (load_mem_from_buffer && data_write_ready)),
+      .en_i((Bcfg3LoadFrom(
+          reg_bcfg3
+      ) == 2'b0 && conv_data_used_half && conv_running) ||
+          (load_mem_from_buffer && data_write_ready)),
       .rst_i(rst_conv || ldw_strt),
       .start_val_i({BuffAddrSize{1'b0}}),
       .end_val_i((load_mem_from_buffer) ? mem_count_difference : LastBufferAddr),
@@ -238,7 +242,7 @@ module aether_engine #(
   );
 
   core_shift_reg_store #(
-      .N(16),  // Width of the data
+      .Bits(16),  // Width of the data
       .Length(ConvWeightSizeMem)  // Number of registers
   ) conv_weight_mem_shift_inst (
       .clk_i,  // clock
@@ -277,54 +281,36 @@ module aether_engine #(
 
   //TODO: This is hardcoded bitwidth, make it dynamic
   localparam unsigned ConvEngineCountCeil = (ConvEngineCount / 2) + (ConvEngineCount % 2);
-  logic conv_no_data;
   logic signed [DataWidth-1:0] conv_activation_data;
 
   logic signed [7:0] data_a;
   logic signed [7:0] data_b;
   logic data_number;
+  logic conv_data_used;
 
-  logic conv_running;
+  assign data_a = $signed(input_buffer_data[7:0]);
+  assign data_b = $signed(input_buffer_data[15:8]);
 
   // assign reg_stats.conv_done_i = conv_done;
   // assign reg_stats.conv_running_i = conv_running;
 
-  assign conv_no_data = !conv_running;
-
-  simple_counter #(
-      .Bits(1)
-  ) simple_counter_inst_a (
-      .clk_i(clk_i),
-      .en_i(conv_running && (!Crpm1SaveToRam(
-          reg_cprm1
-      ) || Crpm1SaveToRam(
-          reg_cprm1
-      ) && conv_save_done && conv_valid || !conv_valid)),
-      .rst_i(rst_conv),
-      .count_o(data_number)
-  );
-
-  logic data_number_buf;
-  core_delay #(
-      .Delay(1)
-  ) conv_need_data_singlefire (
+  /// Activations are 8 bits in a 16 bit store, we need to only get new data at 1/2 clk rate
+  /// TODO: This is a crappy T flip flop, but it works
+  core_d_ff conv_used_data_half (
       .clk_i,
-      .rst_i (1'b0),
-      .en_i  (1'b1),
-      .data_i(data_number),
-      .data_o(data_number_buf),
-      .assert_on_i
+      .rst_i (rst_conv),
+      .en_i  (conv_data_used),
+      .data_i(~conv_data_used_half),
+      .data_o(conv_data_used_half)
   );
 
-  assign data_a = $signed(input_buffer_data[7:0]);
-  assign data_b = $signed(input_buffer_data[15:8]);
-  assign conv_need_data = data_number && !data_number_buf;
-
-  always_comb begin
+  /// Activations are 8 bits in a 16 bit store, we need to only get new data at 1/2 clk rate
+  always_comb begin : split_conv_data
     conv_activation_data = {DataWidth{1'b0}};
-    if (!conv_running) conv_activation_data = {DataWidth{1'b0}};
-    else if (data_number) conv_activation_data = data_a;
-    else conv_activation_data = data_b;
+    if (conv_running) begin
+      if (conv_data_used_half) conv_activation_data = data_a;
+      else conv_activation_data = data_b;
+    end
   end
 
   convolution_layer #(
@@ -339,22 +325,24 @@ module aether_engine #(
       .kernel_weights_i(conv_kernel_weights),
       .reg_bcfg1_i(reg_bcfg1),
       .reg_bcfg2_i(reg_bcfg2),
-      .reg_bcfg3_i(reg_bcfg3),
       .reg_cprm1_i(reg_cprm1),
-      .has_data_i,
+      .has_data_i(Bcfg3LoadFrom(
+          reg_bcfg3
+      ) == 2'b0 ? 1'b1 : 1'b0),  //TODO: When not loading from buffer send the signal
 
       // enable convolution
       // run the convolution
       // - We need to have data to run the convolution
       // - We need to not be saving the data to memory if the convolution is valid
-      .req_next_i(!conv_no_data && (!Crpm1SaveToRam(
+      // TODO: does this need !conv_no_data as the has_data_I might have problems (fine for now)
+      .req_next_i(!Crpm1SaveToRam(
           reg_cprm1
       ) || Crpm1SaveToRam(
           reg_cprm1
-      ) && conv_save_done && conv_valid || !conv_valid)),
+      ) && conv_save_done && conv_valid),
 
       .activation_data_i(conv_activation_data),
-      .used_data_o,
+      .used_data_o(conv_data_used),
       .conv_valid_o(conv_valid),
       .data_o(conv_data),
       .conv_done_o(conv_done),
@@ -389,8 +377,8 @@ module aether_engine #(
   logic [$clog2(ConvEngineCountCeil+1)-1:0] engine_count_16b;
   assign engine_count_16b = ((Bcfg1EngineCount(reg_bcfg1) / 2) + (Bcfg1EngineCount(reg_bcfg1) % 2));
 
-  parallel_to_serial #(
-      .N(16),  // Width of the data
+  core_parallel_to_serial #(
+      .Bits(16),  // Width of the data
       .Length(ConvEngineCountCeil)  // Number of registers
   ) save_conv_to_mem (
       .clk_i,  // clock
@@ -440,7 +428,6 @@ module aether_engine #(
       // Configuration Registers
       .reg_bcfg1_i(reg_bcfg1),
       .reg_bcfg2_i(reg_bcfg2),
-      .reg_bcfg3_i(reg_bcfg3),
       .reg_cprm1_i(reg_cprm1)
   );
 
@@ -459,8 +446,17 @@ module aether_engine #(
       .param_2_i,
       .data_o,
 
-      .reg_stats_i(),  // TODO: Implement interrupts
-      .we_reg_stats_i(),
+      .reg_stats_i({
+        1'b0,  // unused
+        conv_running,
+        1'b0,  //dense running
+        mem_task_running,
+        1'b0,  //error asserted
+        conv_done,
+        1'b0,  // dense done
+        mem_task_finished
+      }),  // TODO: Implement interrupts
+      .we_reg_stats_i(1'b1),
 
       // Register Variables
       .reg_versn_o(reg_versn),
@@ -535,7 +531,7 @@ module aether_engine #(
   // assign reg_stats.memory_done_i = mem_task_finished;
   // assign reg_stats.memory_running_i = mem_task_running;
 
-  aether_engine_generic_mem_simp #(
+  aether_generic_mem #(
       .ClkRate(ClkRate)
   ) sys_ram_inst (
       .clk_i,

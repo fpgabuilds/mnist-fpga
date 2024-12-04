@@ -52,6 +52,7 @@ module aether_instruct_decoder (
     output logic [1:0] mem_command_o
 );
   `include "../constants/aether_constants.sv"
+  import aether_registers::*;
 
   //------------------------------------------------------------------------------------
   // Setup Register FFs
@@ -65,7 +66,6 @@ module aether_instruct_decoder (
   logic we_bcfg2;  /// write enable base configuration 2
   logic we_bcfg3;  /// write enable base configuration 3
   logic we_cprm1;  /// write enable convolution parameters 1
-  logic we_stats_lower;  /// write enable stats lower
   logic we_stats_upper;  /// write enable stats upper
 
   logic [15:0] temp_reg_memup;  /// temporary memory upper address for user input
@@ -75,10 +75,9 @@ module aether_instruct_decoder (
   logic [15:0] temp_reg_bcfg2;  /// temporary base configuration 2 for user input
   logic [15:0] temp_reg_bcfg3;  /// temporary base configuration 3 for user input
   logic [15:0] temp_reg_cprm1;  /// temporary convolution parameters 1 for user input
-  logic [7:0] temp_reg_stats_lower;  /// temporary stats lower for device status data
   logic [7:0] temp_reg_stats_upper;  /// temporary stats upper for user input
 
-  aether_register_ff#(
+  aether_register_ff #(
       .RegVersnDefault(16'h6C00),
       .RegHwridDefault(16'hB2E9),
       .RegMemupDefault(16'h0000),
@@ -89,7 +88,7 @@ module aether_instruct_decoder (
       .RegBcfg3Default(16'h0000),
       .RegCprm1Default(16'h0040),
       .RegStatsDefault(16'h0000)
-  ) (
+  ) registers (
       .clk_i,
       .rst_i(rst_regs_o),
 
@@ -107,8 +106,8 @@ module aether_instruct_decoder (
       .we_bcfg3_i(we_bcfg3),
       .reg_cprm1_i(temp_reg_cprm1),
       .we_cprm1_i(we_cprm1),
-      .reg_stats_lower_i(temp_reg_stats_lower),
-      .we_stats_lower_i(we_stats_lower),
+      .reg_stats_lower_i(reg_stats_i),
+      .we_stats_lower_i(we_reg_stats_i),
       .reg_stats_upper_i(temp_reg_stats_upper),
       .we_stats_upper_i(we_stats_upper),
 
@@ -370,7 +369,9 @@ module aether_instruct_decoder (
   localparam logic [1:0] MEM_READ = 2'b10;
 
   always_comb begin : memory_management
-    if (ldw_mem_write || (instruction_i == CNV && reg_cprm1_ind_i.save_to_ram_o) || instruction_i == DNS)
+    if (ldw_mem_write || (instruction_i == CNV && Crpm1SaveToRam(
+            reg_cprm1_o
+        )) || instruction_i == DNS)
       mem_command_o = MEM_WRITE;
     else if (ldw_mem_read) mem_command_o = MEM_READ;
     else mem_command_o = MEM_IDLE;
