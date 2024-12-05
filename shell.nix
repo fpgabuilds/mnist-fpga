@@ -23,6 +23,8 @@ in pkgs.mkShell {
     pkgs.gnumake
     pkgs.verible
     pkgs.gtkwave
+    pkgs.zlib # verilator gtkwave
+    pkgs.zlib.dev # verilator gtkwave
   ];
 }
 

@@ -1,38 +1,11 @@
-/*
-convolution_layer #(
-      .MaxMatrixSize(16383),
-      .KernelSize(),
-      .EngineCount(1023),
-      .Bits()
-    ) _inst (
-      .clk_i,
-      .rst_i,
-      .start_i,
-      .kernel_weights_i,
-      .reg_bcfg1_i,
-      .reg_bcfg2_i,
-      .reg_bcfg3_i,
-      .reg_cprm1_i,
-      .has_data_i,
-      .req_next_i,
-      .activation_data_i,
-      .used_data_o(),
-      .conv_valid_o(),
-      .data_o(),
-      .conv_done_o(),
-      .conv_running_o(),
-      .assert_on_i
-    );
-*/
-
 // TODO: add padding to the input matrix
 // TODO: Allow for multiple kernels sizes
 module convolution_layer #(
     /// maximum matrix size that this convolver can convolve
-    parameter logic [13:0] MaxMatrixSize,
-    parameter unsigned KernelSize,  /// kernel size
-    parameter logic [9:0] EngineCount,  /// Amount of instantiated convolvers
-    parameter unsigned Bits  /// total bit width
+    parameter logic [13:0] MaxMatrixSize = 10,
+    parameter unsigned KernelSize = 3,  /// kernel size
+    parameter logic [11:0] EngineCount = 2,  /// Amount of instantiated convolvers
+    parameter unsigned Bits = 8  /// total bit width
 ) (
     //------------------------------------------------------------------------------------
     // Non Time Critical Inputs (Initial or Asynchronous)
@@ -225,8 +198,8 @@ module convolution_layer #(
   //  - accum_data_out_c2: The previous convolution data to accumulate with the recently calculated convolution data
 
   localparam unsigned ConvOutputCount = (MaxMatrixSize - KernelSize + 1) ** 2;
-  localparam unsigned ConvOutputSize = $clog2(ConvOutputCount + 1);
-  localparam logic [ConvOutputSize-1:0] ConvOutputEndVal = ConvOutputCount - 1;
+  localparam unsigned ConvOutputSize = $clog2(ConvOutputCount);
+  localparam logic [ConvOutputSize-1:0] ConvOutputEndVal =  ConvOutputSize'(ConvOutputCount - 1);
 
   logic signed [2*Bits-1:0] data_conv_c2[EngineCount-1:0];
 
@@ -307,7 +280,7 @@ module convolution_layer #(
           .b_clk_i(clk_i),
           .b_write_en_i(1'b0),
           .b_addr_i(accum_addr_read),  //conv_counter != ConvOutputEndVal means run only once
-          .b_data_i({{2 * Bits} {1'b0}}),
+          .b_data_i((2 * Bits)'(0)),
           .b_data_o(prev_result),
 
           .assert_on_i
@@ -440,12 +413,12 @@ module convolution_layer #(
 
       assign sum_accum = (Crpm1Accumulate(
           reg_cprm1
-      )) ? data_conv_c3[i] + accum_data_out_c3[i] : data_conv_c3[i];
+      )) ? data_conv_c3[i] + accum_data_out_c3[i] : {1'b0, data_conv_c3[i]};
       //assign sum = sum_accum >>> shift_amount;
-      assign sum = (Crpm1SaveToRam(reg_cprm1)) ? 16'h5555 : sum_accum >>> shift_amount;
+      assign sum = (Crpm1SaveToRam(reg_cprm1)) ? 16'h5555 : (2*Bits)'(sum_accum >>> shift_amount);
       assign accum_data_in_c3[i] = (i < Bcfg1EngineCount(reg_bcfg1)) ? sum : {2 * Bits{1'b0}};
 
-      assign accum_out = accum_data_in_c3[i] >>> (2 * Bits - Bits);
+      assign accum_out = Bits'(accum_data_in_c3[i] >>> (Bits)); //TODO: Why was it 2 * Bits - Bits
 
 
       core_d_ff #(

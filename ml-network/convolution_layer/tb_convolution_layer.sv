@@ -97,7 +97,7 @@ module tb_convolution_layer ();
     reg_bcfg2 = 16'h0010;  // Test that these are cloned on start
 
     for (int i = 0; i < MatrixSize * MatrixSize; i = i + 1) begin
-      activation_data = i;
+      activation_data = 8'(i);
       @(posedge clk);
     end
 
@@ -114,7 +114,7 @@ module tb_convolution_layer ();
     start = 1'b0;
 
     for (int i = 0; i < MatrixSize * MatrixSize; i = i + 1) begin
-      activation_data = -i;
+      activation_data = 8'(-i);
       @(posedge clk);
     end
 

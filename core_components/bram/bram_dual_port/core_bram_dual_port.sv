@@ -72,13 +72,13 @@ module core_bram_dual_port #(
     // Port A
     input logic a_clk_i,
     input logic a_write_en_i,
-    input logic [$clog2(ABitDepth+1)-1:0] a_addr_i,
+    input logic [$clog2(ABitDepth)-1:0] a_addr_i,
     input logic [ADataWidth-1:0] a_data_i,
     output logic [ADataWidth-1:0] a_data_o,
     // Port B
     input logic b_clk_i,
     input logic b_write_en_i,
-    input logic [$clog2(ABitDepth+1)-1:0] b_addr_i,
+    input logic [$clog2(ABitDepth)-1:0] b_addr_i,
     input logic [ADataWidth-1:0] b_data_i,
     output logic [ADataWidth-1:0] b_data_o,
 
@@ -87,9 +87,10 @@ module core_bram_dual_port #(
 `ifdef ENABLE_SIMULATION_ASSERTS
   always @(posedge a_clk_i) begin
     if (assert_on_i) begin
-      assert (a_addr_i < ABitDepth)
+      localparam unsigned ADDR_WIDTH = $clog2(ABitDepth);
+      assert (32'(a_addr_i) <= (ABitDepth - 1))
       else $error("Address A out of bounds: %h, Depth: %h", a_addr_i, ABitDepth);
-      assert (b_addr_i < ABitDepth)
+      assert (32'(b_addr_i) <= (ABitDepth - 1))
       else $error("Address B out of bounds: %h, Depth: %h", b_addr_i, ABitDepth);
     end
   end

@@ -1,5 +1,3 @@
-`define ENABLE_SIMULATION_ASSERTS 0
-
 module aether_top (
     input logic clk_i,
     input logic [23:0] cmd_i,

@@ -1,6 +1,6 @@
 module activation_layer #(
     parameter unsigned Bits,
-    parameter logic [11:0] EngineCount = 4095
+    parameter logic [11:0] EngineCount
 ) (
     input logic clk_i,
     input logic en_i,

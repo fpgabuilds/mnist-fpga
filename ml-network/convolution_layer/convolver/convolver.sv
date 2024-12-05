@@ -29,7 +29,7 @@ module convolver #(
       else $error("Bits must be greater than 0");
       assert (matrix_size_i >= KernelSize)
       else $error("matrix_size_i must be greater than or equal to KernelSize");
-      assert (stride_i < matrix_size_i)
+      assert (14'(stride_i) < matrix_size_i)
       else
         $error(
             "Stride must be less than matrix_size_i, stride = %0d, matrix_size_i = %0d",
@@ -86,21 +86,21 @@ module convolver #(
               .add_i  (conv_vals[i-1]),
               .mac_o  (end_row_data)
           );
-
-          logic [2*Bits-1:0] store[MaxMatrixSize-KernelSize-1:0];
+          localparam unsigned StoreBitsSize = MaxMatrixSize-KernelSize;
+          logic [2*Bits-1:0] store[StoreBitsSize-1:0];
           core_shift_reg_store #(
               .Bits  (2 * Bits),
               .Length(MaxMatrixSize - KernelSize)
           ) row_shift (
               .clk_i,
               .en_i,
-              .rst_i(),
+              .rst_i(1'b0),
               .rst_val_i({2 * Bits{1'b0}}),
               .data_i(end_row_data),
               .data_o(),
               .store_o(store)
           );
-          assign conv_vals[i] = store[matrix_size_i-KernelSize-1];
+          assign conv_vals[i] = store[$clog2(StoreBitsSize)'(matrix_size_i-14'(KernelSize-1))];
         end
       end else begin : g_middle_mac
         mac_int #(
@@ -127,7 +127,7 @@ module convolver #(
   logic [ClkCountSize-1:0] max_clk_count;
   logic [ClkCountSize-1:0] clk_count;
 
-  assign max_clk_count = matrix_size_i * matrix_size_i + 1;
+  assign max_clk_count = ClkCountSize'(matrix_size_i * matrix_size_i + 1);
 
   increment_then_stop #(
       .Bits(ClkCountSize)
@@ -141,7 +141,7 @@ module convolver #(
       .assert_on_i
   );
 
-  assign min_cycles = clk_count > ((KernelSize - 1) * matrix_size_i + KernelSize - 1);
+  assign min_cycles = clk_count > ClkCountSize'((KernelSize - 1) * matrix_size_i + KernelSize - 1);
   assign end_conv_o = (clk_count == max_clk_count) ? 1'b1 : 1'b0;
 
 
@@ -156,8 +156,8 @@ module convolver #(
   logic [InvConcCountSize-1:0] max_inv_count;
   logic [InvConcCountSize-1:0] inv_count;
 
-  assign max_conv_count = matrix_size_i - KernelSize;
-  assign max_inv_count  = KernelSize - 2;
+  assign max_conv_count = ConvCountSize'(matrix_size_i - 14'(KernelSize));
+  assign max_inv_count  = InvConcCountSize'(KernelSize - 2);
 
   counter #(
       .Bits(ConvCountSize)
@@ -187,7 +187,7 @@ module convolver #(
 
   always_ff @(posedge clk_i or posedge rst_i) begin
     if (rst_i) row_conv <= 1'b1;
-    else if (inv_count == KernelSize - 2) row_conv <= 1'b1;
+    else if (2'(inv_count) == KernelSize - 2) row_conv <= 1'b1;
     else if (conv_count == max_conv_count) row_conv <= 1'b0;
   end
 
@@ -200,7 +200,7 @@ module convolver #(
       .Bits(RowCountSize)
   ) row_counter (  // Counts total clock cycles used in this convolution
       .clk_i,
-      .en_i(conv_count == matrix_size_i - KernelSize),
+      .en_i(14'(conv_count) == matrix_size_i - KernelSize),
       .rst_i,
       .start_val_i({RowCountSize{1'b0}}),
       .end_val_i({RowCountSize{1'b1}}),
@@ -212,9 +212,9 @@ module convolver #(
   logic b;
   logic c;
 
-  assign a = ((conv_count + 1) % stride_i == 0) && (row_count % stride_i == 0);
-  assign b = (inv_count == KernelSize - 2) && (row_count % stride_i == 0);
-  assign c = (clk_count == (KernelSize - 1) * matrix_size_i + KernelSize - 1);
+  assign a = ((conv_count + ConvCountSize'(1)) % ConvCountSize'(stride_i) == 0) && (6'(row_count) % stride_i == 0);
+  assign b = (2'(inv_count) == KernelSize - 2) && (6'(row_count) % stride_i == 0);
+  assign c = (14'(clk_count) == (KernelSize - 1) * matrix_size_i + KernelSize - 1);
 
   assign stride_conv = (a || b || c);
   assign valid_conv_o = (min_cycles && row_conv && stride_conv && !end_conv_o);
